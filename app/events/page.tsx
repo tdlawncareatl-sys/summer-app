@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
+import { ensureUser } from '@/lib/ensureUser'
 
 const FRIENDS = [
   'Tad', 'Grace', 'Liam', 'Mcguire', 'Carter', 'Storm',
@@ -19,6 +20,8 @@ type Event = {
   created_at: string
   dateCount?: number
   voteCount?: number
+  // dates where the current user is blocked
+  myConflictDates?: string[]
 }
 
 export default function EventsPage() {
@@ -30,7 +33,8 @@ export default function EventsPage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { loadEvents() }, [])
+  // Load events on mount, and reload when name changes (to refresh conflict warnings)
+  useEffect(() => { loadEvents() }, [name])
 
   async function loadEvents() {
     setLoading(true)
@@ -42,19 +46,16 @@ export default function EventsPage() {
 
     if (!data) { setLoading(false); return }
 
-    // Fetch date option and vote counts
-    const { data: dateOptions } = await supabase
-      .from('date_options')
-      .select('id, event_id')
+    // Batch: fetch all date options and all votes
+    const [{ data: dateOptions }, { data: votes }] = await Promise.all([
+      supabase.from('date_options').select('id, event_id, date'),
+      supabase.from('votes').select('id, date_option_id'),
+    ])
 
-    const { data: votes } = await supabase
-      .from('votes')
-      .select('id, date_option_id')
-
-    const optionsByEvent: Record<string, string[]> = {}
+    const optionsByEvent: Record<string, { id: string; date: string }[]> = {}
     for (const opt of dateOptions ?? []) {
       if (!optionsByEvent[opt.event_id]) optionsByEvent[opt.event_id] = []
-      optionsByEvent[opt.event_id].push(opt.id)
+      optionsByEvent[opt.event_id].push({ id: opt.id, date: opt.date })
     }
 
     const votesByOption: Record<string, number> = {}
@@ -62,10 +63,25 @@ export default function EventsPage() {
       votesByOption[v.date_option_id] = (votesByOption[v.date_option_id] ?? 0) + 1
     }
 
+    // If a user is selected, fetch their blackout dates to detect conflicts
+    let myBlackouts: Set<string> = new Set()
+    if (name) {
+      const userId = await ensureUser(name)
+      const { data: avail } = await supabase
+        .from('availability')
+        .select('date')
+        .eq('user_id', userId)
+      myBlackouts = new Set((avail ?? []).map((r) => r.date))
+    }
+
     const enriched: Event[] = data.map((ev) => {
-      const optIds = optionsByEvent[ev.id] ?? []
-      const totalVotes = optIds.reduce((sum, oid) => sum + (votesByOption[oid] ?? 0), 0)
-      return { ...ev, dateCount: optIds.length, voteCount: totalVotes }
+      const opts = optionsByEvent[ev.id] ?? []
+      const totalVotes = opts.reduce((sum, opt) => sum + (votesByOption[opt.id] ?? 0), 0)
+      // Which proposed dates conflict with my own blackouts?
+      const myConflictDates = name
+        ? opts.filter((opt) => myBlackouts.has(opt.date)).map((opt) => opt.date)
+        : []
+      return { ...ev, dateCount: opts.length, voteCount: totalVotes, myConflictDates }
     })
 
     setEvents(enriched)
@@ -184,11 +200,16 @@ export default function EventsPage() {
         <div className="flex flex-col gap-3">
           {events.map((event) => {
             const cfg = statusConfig[event.status] ?? { label: event.status, classes: 'bg-gray-100 text-gray-500' }
+            const hasConflict = name && (event.myConflictDates?.length ?? 0) > 0
             return (
               <Link
                 key={event.id}
                 href={`/events/${event.id}`}
-                className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-purple-200 hover:shadow-md transition-all active:scale-[0.98]"
+                className={`block bg-white rounded-2xl border shadow-sm p-4 hover:shadow-md transition-all active:scale-[0.98] ${
+                  hasConflict
+                    ? 'border-amber-200 hover:border-amber-300'
+                    : 'border-gray-100 hover:border-purple-200'
+                }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -196,7 +217,7 @@ export default function EventsPage() {
                     {event.description && (
                       <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{event.description}</p>
                     )}
-                    <div className="flex items-center gap-3 mt-2">
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
                       {(event.dateCount ?? 0) > 0 ? (
                         <>
                           <span className="text-xs text-gray-400">
@@ -211,6 +232,12 @@ export default function EventsPage() {
                         <span className="text-xs text-gray-300">No dates proposed yet</span>
                       )}
                     </div>
+                    {/* Conflict warning for current user */}
+                    {hasConflict && (
+                      <p className="text-xs font-semibold text-amber-600 mt-2">
+                        ⚠️ You&apos;re blocked on some proposed dates
+                      </p>
+                    )}
                   </div>
                   <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize shrink-0 ${cfg.classes}`}>
                     {cfg.label}
