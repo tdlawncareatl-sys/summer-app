@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
@@ -22,6 +22,7 @@ const DAY_LABELS = ['Su','Mo','Tu','We','Th','Fr','Sa']
 type DateOption = {
   id: string
   date: string
+  end_date?: string | null
   votes: { response: string; points: number; user_name: string }[]
   totalPoints: number
   blockedCount: number
@@ -37,7 +38,6 @@ type Event = {
   created_by: string | null
 }
 
-// Map of date -> list of blocked friend names (from availability table)
 type GroupBlackouts = Record<string, string[]>
 
 type BestDate = {
@@ -46,22 +46,40 @@ type BestDate = {
   blockedCount: number
 }
 
-function formatDate(iso: string) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
+// Generate all ISO dates between a and b (inclusive), handles either order
+function getRange(a: string, b: string): string[] {
+  const start = new Date(a + 'T12:00:00')
+  const end = new Date(b + 'T12:00:00')
+  const [s, e] = start <= end ? [start, end] : [end, start]
+  const days: string[] = []
+  const cur = new Date(s)
+  while (cur <= e) {
+    days.push(cur.toISOString().split('T')[0])
+    cur.setDate(cur.getDate() + 1)
+  }
+  return days
 }
 
-// Conflict-aware score: votes count for a lot, but each blocked person penalizes
-// Formula: totalPoints - (blockedCount * 2)
-// This means 8pts with 4 blocked (score=0) < 7pts with 0 blocked (score=7)
+// All days covered by a date option (single day if no end_date)
+function getDaysInRange(start: string, end?: string | null): string[] {
+  if (!end || end === start) return [start]
+  return getRange(start, end)
+}
+
+function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', opts ?? { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function formatDateRange(start: string, end?: string | null): string {
+  if (!end || end === start) return formatDate(start)
+  const count = getDaysInRange(start, end).length
+  return `${formatDate(start, { month: 'short', day: 'numeric' })} – ${formatDate(end, { month: 'short', day: 'numeric' })} (${count} days)`
+}
+
 function conflictScore(totalPoints: number, blockedCount: number): number {
   return totalPoints - blockedCount * 2
 }
 
-// Color for conflict indicator: green=none, yellow=some, red=many
 function conflictColor(blockedCount: number): { bg: string; text: string; label: string } {
   const ratio = blockedCount / TOTAL_FRIENDS
   if (blockedCount === 0) return { bg: 'bg-green-100', text: 'text-green-700', label: 'No conflicts' }
@@ -70,7 +88,6 @@ function conflictColor(blockedCount: number): { bg: string; text: string; label:
   return { bg: 'bg-red-100', text: 'text-red-700', label: `${blockedCount} blocked` }
 }
 
-// Color for mini calendar cell
 function calendarCellColor(blockedCount: number): string {
   if (blockedCount === 0) return 'bg-white text-gray-800 hover:bg-gray-50'
   const ratio = blockedCount / TOTAL_FRIENDS
@@ -86,12 +103,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [dateOptions, setDateOptions] = useState<DateOption[]>([])
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
   const [bestDates, setBestDates] = useState<BestDate[]>([])
-  const [newDate, setNewDate] = useState('')
   const [addingDate, setAddingDate] = useState(false)
   const [voting, setVoting] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
 
-  // Mini calendar state
+  // Range selection state
+  const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null)
+  const [calPreview, setCalPreview] = useState<Set<string>>(new Set())
+  const calDrag = useRef<string | null>(null)
+
   const today = new Date()
   const todayISO = today.toISOString().split('T')[0]
   const [calYear, setCalYear] = useState(today.getFullYear())
@@ -100,7 +120,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => { loadAll() }, [id])
 
   async function loadAll() {
-    // Fetch event, date options, votes, users, and availability all at once
     const [
       { data: ev },
       { data: options },
@@ -109,7 +128,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       { data: avail },
     ] = await Promise.all([
       supabase.from('events').select('id, title, description, status, created_by').eq('id', id).single(),
-      supabase.from('date_options').select('id, date').eq('event_id', id).order('date', { ascending: true }),
+      supabase.from('date_options').select('id, date, end_date').eq('event_id', id).order('date', { ascending: true }),
       supabase.from('votes').select('date_option_id, response, points, user_id'),
       supabase.from('users').select('id, name'),
       supabase.from('availability').select('user_id, date'),
@@ -117,10 +136,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
     if (ev) setEvent(ev)
 
-    // Build user map: id -> name
     const userMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
 
-    // Build group blackouts map: date -> [names]
     const blackoutsMap: GroupBlackouts = {}
     for (const row of avail ?? []) {
       const friendName = userMap[row.user_id]
@@ -130,7 +147,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
     setGroupBlackouts(blackoutsMap)
 
-    // Compute best dates for the next 90 days
+    // Best single days in the next 90 days (fewest conflicts)
     const ninetyDays: BestDate[] = []
     for (let i = 1; i <= 90; i++) {
       const d = new Date(today)
@@ -139,13 +156,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const blocked = blackoutsMap[iso]?.length ?? 0
       ninetyDays.push({ date: iso, blockedCount: blocked, availableCount: TOTAL_FRIENDS - blocked })
     }
-    // Sort by fewest blocked, break ties by date (sooner first)
     ninetyDays.sort((a, b) => a.blockedCount - b.blockedCount || a.date.localeCompare(b.date))
     setBestDates(ninetyDays.slice(0, 5))
 
     if (!options || options.length === 0) { setDateOptions([]); return }
 
-    // Only include votes for options on this event
     const optionIds = new Set(options.map((o) => o.id))
     const relevantVotes = (votes ?? []).filter((v) => optionIds.has(v.date_option_id))
 
@@ -154,8 +169,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         .filter((v) => v.date_option_id === opt.id)
         .map((v) => ({ response: v.response, points: v.points, user_name: userMap[v.user_id] ?? '?' }))
       const totalPoints = optVotes.reduce((sum, v) => sum + v.points, 0)
-      const blockedNames = blackoutsMap[opt.date] ?? []
+
+      // Conflict check spans every day in the range
+      const optDays = getDaysInRange(opt.date, opt.end_date)
+      const blockedNamesSet = new Set<string>()
+      optDays.forEach((day) => {
+        ;(blackoutsMap[day] ?? []).forEach((n) => blockedNamesSet.add(n))
+      })
+      const blockedNames = [...blockedNamesSet]
       const blockedCount = blockedNames.length
+
       return {
         ...opt,
         votes: optVotes,
@@ -166,7 +189,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
     })
 
-    // Sort by conflict-aware score (descending), break ties by fewer blocked
     setDateOptions(enriched.sort((a, b) => {
       if (b.conflictScore !== a.conflictScore) return b.conflictScore - a.conflictScore
       return a.blockedCount - b.blockedCount
@@ -174,14 +196,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function addDateOption() {
-    if (!newDate || !name) return
+    if (!selectedRange || !name) return
     setAddingDate(true)
     await ensureUser(name)
-    const { error } = await supabase
-      .from('date_options')
-      .insert({ event_id: id, date: newDate, created_by: name })
+    const payload: Record<string, string> = {
+      event_id: id,
+      date: selectedRange.start,
+      created_by: name,
+    }
+    if (selectedRange.end !== selectedRange.start) {
+      payload.end_date = selectedRange.end
+    }
+    const { error } = await supabase.from('date_options').insert(payload)
     if (error) console.error('addDate:', error)
-    setNewDate('')
+    setSelectedRange(null)
     setAddingDate(false)
     await loadAll()
   }
@@ -227,7 +255,36 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     return option.votes.find((v) => v.user_name === name)?.response ?? null
   }
 
-  // Calendar helpers
+  // ── Calendar drag handlers ──────────────────────────────────────────────────
+  function calStartDrag(iso: string) {
+    if (iso < todayISO) return
+    calDrag.current = iso
+    setCalPreview(new Set([iso]))
+    setSelectedRange(null)
+  }
+
+  function calMoveDrag(iso: string) {
+    if (!calDrag.current || iso < todayISO) return
+    setCalPreview(new Set(getRange(calDrag.current, iso)))
+  }
+
+  function calCommitDrag() {
+    if (!calDrag.current || calPreview.size === 0) {
+      calDrag.current = null
+      setCalPreview(new Set())
+      return
+    }
+    const days = [...calPreview].sort()
+    setSelectedRange({ start: days[0], end: days[days.length - 1] })
+    calDrag.current = null
+    setCalPreview(new Set())
+  }
+
+  function isoFromTouch(touch: React.Touch): string | null {
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    return el?.getAttribute('data-iso') ?? null
+  }
+
   function prevCalMonth() {
     if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1) }
     else setCalMonth((m) => m - 1)
@@ -248,14 +305,21 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   ]
   while (calCells.length % 7 !== 0) calCells.push(null)
 
-  // Show confirm button if: not already confirmed, there are votes, and top option is clearly leading
   const topOption = dateOptions[0]
   const secondOption = dateOptions[1]
   const hasVotes = (topOption?.votes.length ?? 0) > 0
-  const isLeading =
-    hasVotes &&
-    (!secondOption || topOption.conflictScore > secondOption.conflictScore)
+  const isLeading = hasVotes && (!secondOption || topOption.conflictScore > secondOption.conflictScore)
   const showConfirm = event?.status !== 'confirmed' && isLeading
+
+  // Conflict count across all days in selected range
+  const selectedConflicts = selectedRange
+    ? (() => {
+        const days = getDaysInRange(selectedRange.start, selectedRange.end)
+        const names = new Set<string>()
+        days.forEach((d) => (groupBlackouts[d] ?? []).forEach((n) => names.add(n)))
+        return names.size
+      })()
+    : 0
 
   if (!event) return (
     <main className="min-h-screen bg-gray-50 p-5 max-w-md mx-auto">
@@ -271,7 +335,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const statusCfg = statusConfig[event.status] ?? { label: event.status, classes: 'bg-gray-100 text-gray-500' }
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-10">
+    <main className="min-h-screen bg-gray-50 pb-10 select-none">
       <div className="max-w-md mx-auto px-5">
         <div className="pt-5 pb-1">
           <a href="/events" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">← Events</a>
@@ -292,14 +356,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </span>
           </div>
 
-          {/* Confirm button */}
           {showConfirm && (
             <button
               onClick={confirmEvent}
               disabled={confirming}
               className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-2xl text-sm hover:bg-green-700 active:scale-[0.98] disabled:opacity-50 transition-all shadow-sm"
             >
-              {confirming ? 'Confirming...' : `Mark as Confirmed — ${formatDate(topOption.date)}`}
+              {confirming ? 'Confirming...' : `Mark as Confirmed — ${formatDateRange(topOption.date, topOption.end_date)}`}
             </button>
           )}
         </div>
@@ -307,10 +370,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         {/* Best available dates */}
         {bestDates.length > 0 && (
           <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
               📊 Best Available Dates
             </p>
-            <p className="text-xs text-gray-400 mb-3">Fewest people blocked in the next 90 days</p>
+            <p className="text-xs text-gray-400 mb-3">Tap to start a selection, then drag to extend</p>
             <div className="flex flex-col gap-2">
               {bestDates.map((bd) => {
                 const conflict = conflictColor(bd.blockedCount)
@@ -318,17 +381,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   <button
                     key={bd.date}
                     onClick={() => {
-                      setNewDate(bd.date)
-                      // Navigate calendar to the month of this date
+                      setSelectedRange({ start: bd.date, end: bd.date })
                       const d = new Date(bd.date + 'T12:00:00')
                       setCalYear(d.getFullYear())
                       setCalMonth(d.getMonth())
                     }}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all active:scale-[0.98] hover:border-purple-200 hover:bg-purple-50 ${conflict.bg} border-transparent`}
                   >
-                    <div>
-                      <p className={`text-sm font-semibold ${conflict.text}`}>{formatDate(bd.date)}</p>
-                    </div>
+                    <p className={`text-sm font-semibold ${conflict.text}`}>{formatDate(bd.date)}</p>
                     <div className="text-right shrink-0 ml-3">
                       <p className={`text-xs font-bold ${conflict.text}`}>
                         {bd.availableCount}/{TOTAL_FRIENDS} available
@@ -341,7 +401,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 )
               })}
             </div>
-            <p className="text-xs text-gray-300 mt-2 text-center">Tap a date to auto-fill the picker below</p>
           </div>
         )}
 
@@ -373,6 +432,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             const my = myVote(option)
             const isTop = i === 0 && option.conflictScore > 0
             const conflict = conflictColor(option.blockedCount)
+            const isRange = option.end_date && option.end_date !== option.date
+            const dayCount = getDaysInRange(option.date, option.end_date).length
             return (
               <div
                 key={option.id}
@@ -385,8 +446,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     {isTop && (
                       <span className="text-xs font-bold text-green-600 block mb-0.5">Leading</span>
                     )}
-                    <p className="font-bold text-gray-900">{formatDate(option.date)}</p>
-                    {/* Conflict-aware score breakdown */}
+                    <p className="font-bold text-gray-900">
+                      {isRange
+                        ? `${formatDate(option.date, { month: 'short', day: 'numeric' })} – ${formatDate(option.end_date!, { month: 'short', day: 'numeric' })}`
+                        : formatDate(option.date)
+                      }
+                    </p>
+                    {isRange && (
+                      <p className="text-xs text-gray-400">{dayCount} days</p>
+                    )}
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-gray-400">
                         {option.totalPoints} pts · {option.votes.length} vote{option.votes.length !== 1 ? 's' : ''}
@@ -394,9 +462,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${conflict.bg} ${conflict.text}`}>
                         {option.blockedCount === 0 ? '✓ No conflicts' : `⚠ ${conflict.label}`}
                       </span>
-                      <span className="text-xs text-gray-300">
-                        score: {option.conflictScore}
-                      </span>
+                      <span className="text-xs text-gray-300">score: {option.conflictScore}</span>
                     </div>
                   </div>
                   {name && (
@@ -419,7 +485,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   )}
                 </div>
 
-                {/* Vote breakdown */}
                 {option.votes.length > 0 && (
                   <div className="flex flex-wrap gap-1 pt-2 border-t border-gray-50">
                     {option.votes.map((v) => {
@@ -436,7 +501,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   </div>
                 )}
 
-                {/* Blocked names */}
                 {option.blockedNames.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-50">
                     <p className="text-xs text-gray-400 mb-1">
@@ -459,104 +523,116 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           })}
         </div>
 
-        {/* Add date — smart mini calendar */}
+        {/* Propose dates — drag-select calendar */}
         {name && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Propose a date</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Propose dates</p>
+            <p className="text-xs text-gray-400 mb-3">Tap a day or drag to select a multi-day range</p>
 
             {/* Conflict color legend */}
             <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <div className="w-3 h-3 rounded bg-white border border-gray-200" />
-                <span>Free</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <div className="w-3 h-3 rounded bg-yellow-100" />
-                <span>Few blocked</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <div className="w-3 h-3 rounded bg-yellow-300" />
-                <span>Some</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <div className="w-3 h-3 rounded bg-red-400" />
-                <span>Many</span>
-              </div>
+              {([
+                ['bg-white border border-gray-200', 'Free'],
+                ['bg-yellow-100', 'Few blocked'],
+                ['bg-yellow-300', 'Some'],
+                ['bg-red-400', 'Many'],
+              ] as const).map(([cls, label]) => (
+                <div key={label} className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className={`w-3 h-3 rounded ${cls}`} />
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Mini calendar */}
-            <div className="border border-gray-100 rounded-xl overflow-hidden mb-3">
-              {/* Calendar header */}
+            {/* Mini calendar with drag-select */}
+            <div
+              className="border border-gray-100 rounded-xl overflow-hidden mb-3"
+              onMouseUp={calCommitDrag}
+              onMouseLeave={calCommitDrag}
+            >
               <div className="flex items-center justify-between px-3 py-2 bg-gray-900 text-white">
                 <button
                   onClick={prevCalMonth}
                   className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 transition text-base"
-                >
-                  ‹
-                </button>
+                >‹</button>
                 <span className="text-xs font-semibold">{MONTH_NAMES[calMonth]} {calYear}</span>
                 <button
                   onClick={nextCalMonth}
                   className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 transition text-base"
-                >
-                  ›
-                </button>
+                >›</button>
               </div>
 
-              {/* Day labels */}
               <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-100">
                 {DAY_LABELS.map((d) => (
                   <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1.5">{d}</div>
                 ))}
               </div>
 
-              {/* Calendar cells */}
-              <div className="grid grid-cols-7 gap-0.5 p-2">
+              <div
+                className="grid grid-cols-7 gap-0.5 p-2"
+                onTouchStart={(e) => { const iso = isoFromTouch(e.touches[0]); if (iso) calStartDrag(iso) }}
+                onTouchMove={(e) => { e.preventDefault(); const iso = isoFromTouch(e.touches[0]); if (iso) calMoveDrag(iso) }}
+                onTouchEnd={calCommitDrag}
+              >
                 {calCells.map((iso, i) => {
                   if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
                   const isPast = iso < todayISO
-                  const isSelected = newDate === iso
+                  const isInPreview = calPreview.has(iso)
+                  const isInSelected = !!selectedRange && iso >= selectedRange.start && iso <= selectedRange.end
                   const isToday = iso === todayISO
                   const blockedCount = groupBlackouts[iso]?.length ?? 0
                   const day = parseInt(iso.split('-')[2])
-                  const colorClass = isPast
-                    ? 'bg-gray-50 text-gray-200 cursor-default'
-                    : calendarCellColor(blockedCount)
+
+                  let cellClass: string
+                  if (isPast) {
+                    cellClass = 'bg-gray-50 text-gray-200 cursor-default'
+                  } else if (isInSelected) {
+                    cellClass = 'bg-purple-500 text-white font-bold cursor-pointer'
+                  } else if (isInPreview) {
+                    cellClass = 'bg-purple-200 text-purple-800 cursor-pointer'
+                  } else {
+                    cellClass = calendarCellColor(blockedCount) + ' cursor-pointer'
+                  }
 
                   return (
-                    <button
+                    <div
                       key={iso}
-                      type="button"
-                      disabled={isPast}
-                      onClick={() => !isPast && setNewDate(iso)}
+                      data-iso={iso}
+                      onMouseDown={() => calStartDrag(iso)}
+                      onMouseEnter={() => calMoveDrag(iso)}
                       className={[
-                        'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all',
-                        colorClass,
-                        isSelected ? 'ring-2 ring-purple-500 ring-offset-1 font-bold' : '',
-                        isToday && !isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : '',
+                        'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-colors',
+                        cellClass,
+                        isToday && !isInSelected && !isInPreview ? 'ring-2 ring-blue-400 ring-offset-1' : '',
                       ].join(' ')}
                     >
                       <span className="leading-none">{day}</span>
-                      {blockedCount > 0 && !isPast && (
+                      {blockedCount > 0 && !isPast && !isInSelected && !isInPreview && (
                         <span className="text-[8px] leading-none mt-0.5 opacity-80">{blockedCount}</span>
                       )}
-                    </button>
+                    </div>
                   )
                 })}
               </div>
             </div>
 
-            {/* Selected date display + add button */}
+            {/* Selected range summary + add button */}
             <div className="flex gap-2 items-center">
               <div className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-gray-50 min-h-[42px] flex items-center">
-                {newDate
-                  ? <span className="font-medium">{formatDate(newDate)}{groupBlackouts[newDate]?.length ? ` — ${groupBlackouts[newDate].length} blocked` : ' — no conflicts'}</span>
-                  : <span className="text-gray-400">Pick a date above</span>
-                }
+                {selectedRange ? (
+                  <span className="font-medium">
+                    {formatDateRange(selectedRange.start, selectedRange.end)}
+                    {selectedConflicts > 0
+                      ? ` — ${selectedConflicts} conflict${selectedConflicts !== 1 ? 's' : ''}`
+                      : ' — no conflicts'}
+                  </span>
+                ) : (
+                  <span className="text-gray-400">Tap or drag to select</span>
+                )}
               </div>
               <button
                 onClick={addDateOption}
-                disabled={!newDate || addingDate}
+                disabled={!selectedRange || addingDate}
                 className="bg-purple-600 text-white rounded-xl px-4 py-2.5 text-sm font-bold disabled:opacity-40 hover:bg-purple-700 active:scale-95 transition-all"
               >
                 {addingDate ? '...' : 'Add'}
