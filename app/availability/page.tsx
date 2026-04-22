@@ -11,6 +11,24 @@ const MONTH_NAMES = [
 ]
 const DAY_LABELS = ['Su','Mo','Tu','We','Th','Fr','Sa']
 
+const CATEGORIES = [
+  { value: 'travel',   label: 'Travel',       emoji: '✈️' },
+  { value: 'work',     label: 'Work',          emoji: '💼' },
+  { value: 'family',   label: 'Family',        emoji: '👨‍👩‍👧' },
+  { value: 'plans',    label: 'Prior Plans',   emoji: '🎉' },
+  { value: 'personal', label: 'Personal',      emoji: '🏥' },
+  { value: 'other',    label: 'Other',         emoji: '📌' },
+]
+
+const CATEGORY_COLORS: Record<string, string> = {
+  travel:   'bg-blue-100 text-blue-700 border-blue-200',
+  work:     'bg-gray-100 text-gray-700 border-gray-200',
+  family:   'bg-orange-100 text-orange-700 border-orange-200',
+  plans:    'bg-purple-100 text-purple-700 border-purple-200',
+  personal: 'bg-pink-100 text-pink-700 border-pink-200',
+  other:    'bg-teal-100 text-teal-700 border-teal-200',
+}
+
 function getRange(a: string, b: string): string[] {
   const start = new Date(a + 'T12:00:00')
   const end = new Date(b + 'T12:00:00')
@@ -28,30 +46,35 @@ function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', opts ?? { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-type DateRange = { start: string; end: string; days: string[] }
+type DateRange = { start: string; end: string; days: string[]; category?: string | null }
 type GroupBlackouts = Record<string, string[]>
 type EventConflict = { id: string; title: string; conflictingDates: string[] }
+type BlackoutRecord = { date: string; category?: string | null }
 
-function collapseToRanges(dates: string[]): DateRange[] {
-  if (dates.length === 0) return []
-  const sorted = [...dates].sort()
+function collapseToRanges(records: BlackoutRecord[]): DateRange[] {
+  if (records.length === 0) return []
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
   const ranges: DateRange[] = []
-  let rangeStart = sorted[0]
-  let rangeDays = [sorted[0]]
-  let prev = sorted[0]
+  let rangeStart = sorted[0].date
+  let rangeDays = [sorted[0].date]
+  let rangeCategory = sorted[0].category
+  let prev = sorted[0].date
+
   for (let i = 1; i < sorted.length; i++) {
     const cur = sorted[i]
-    const diff = (new Date(cur + 'T12:00:00').getTime() - new Date(prev + 'T12:00:00').getTime()) / 86400000
-    if (diff === 1) {
-      rangeDays.push(cur)
+    const diff = (new Date(cur.date + 'T12:00:00').getTime() - new Date(prev + 'T12:00:00').getTime()) / 86400000
+    const sameCategory = cur.category === rangeCategory
+    if (diff === 1 && sameCategory) {
+      rangeDays.push(cur.date)
     } else {
-      ranges.push({ start: rangeStart, end: prev, days: rangeDays })
-      rangeStart = cur
-      rangeDays = [cur]
+      ranges.push({ start: rangeStart, end: prev, days: rangeDays, category: rangeCategory })
+      rangeStart = cur.date
+      rangeDays = [cur.date]
+      rangeCategory = cur.category
     }
-    prev = cur
+    prev = cur.date
   }
-  ranges.push({ start: rangeStart, end: prev, days: rangeDays })
+  ranges.push({ start: rangeStart, end: prev, days: rangeDays, category: rangeCategory })
   return ranges
 }
 
@@ -62,16 +85,23 @@ export default function AvailabilityPage() {
   const [name] = useName()
   const [userId, setUserId] = useState<string | null>(null)
   const [blackouts, setBlackouts] = useState<Set<string>>(new Set())
+  const [blackoutRecords, setBlackoutRecords] = useState<BlackoutRecord[]>([])
   const [saved, setSaved] = useState(false)
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
   const [previewDays, setPreviewDays] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'mine' | 'list' | 'group'>('mine')
 
+  // Category picker sheet
+  const [pendingDays, setPendingDays] = useState<string[] | null>(null)
+  const [savingCategory, setSavingCategory] = useState(false)
+
+  // Group view
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
   const [groupLoading, setGroupLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
+  // My Blocks
   const [eventConflicts, setEventConflicts] = useState<EventConflict[]>([])
   const [removingRange, setRemovingRange] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
@@ -81,6 +111,7 @@ export default function AvailabilityPage() {
   useEffect(() => {
     if (!name) return
     setBlackouts(new Set())
+    setBlackoutRecords([])
     setUserId(null)
     loadUser(name)
   }, [name])
@@ -97,8 +128,11 @@ export default function AvailabilityPage() {
   async function loadUser(n: string) {
     const uid = await ensureUser(n)
     setUserId(uid)
-    const { data } = await supabase.from('availability').select('date').eq('user_id', uid)
-    if (data) setBlackouts(new Set(data.map((r) => r.date)))
+    const { data } = await supabase.from('availability').select('date, category').eq('user_id', uid)
+    if (data) {
+      setBlackoutRecords(data)
+      setBlackouts(new Set(data.map((r) => r.date)))
+    }
   }
 
   async function loadGroupBlackouts() {
@@ -154,21 +188,42 @@ export default function AvailabilityPage() {
     drag.current = null
     const days = [...previewDays]
     setPreviewDays(new Set())
-    const newBlackouts = new Set(blackouts)
-    if (mode === 'add') {
-      const toAdd = days.filter((d) => !blackouts.has(d))
-      if (toAdd.length) {
-        await supabase.from('availability').insert(toAdd.map((date) => ({ user_id: userId, date })))
-        toAdd.forEach((d) => newBlackouts.add(d))
-      }
-    } else {
+
+    if (mode === 'remove') {
       const toRemove = days.filter((d) => blackouts.has(d))
       if (toRemove.length) {
         await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
+        const newBlackouts = new Set(blackouts)
         toRemove.forEach((d) => newBlackouts.delete(d))
+        setBlackouts(newBlackouts)
+        setBlackoutRecords((prev) => prev.filter((r) => !toRemove.includes(r.date)))
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } else {
+      // Add — show category picker first
+      const toAdd = days.filter((d) => !blackouts.has(d))
+      if (toAdd.length) {
+        setPendingDays(toAdd)
       }
     }
+  }
+
+  async function saveWithCategory(category: string | null) {
+    if (!pendingDays || !userId) return
+    setSavingCategory(true)
+    await supabase.from('availability').insert(
+      pendingDays.map((date) => ({ user_id: userId, date, category }))
+    )
+    const newBlackouts = new Set(blackouts)
+    pendingDays.forEach((d) => newBlackouts.add(d))
     setBlackouts(newBlackouts)
+    setBlackoutRecords((prev) => [
+      ...prev.filter((r) => !pendingDays.includes(r.date)),
+      ...pendingDays.map((date) => ({ date, category })),
+    ])
+    setPendingDays(null)
+    setSavingCategory(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -180,6 +235,7 @@ export default function AvailabilityPage() {
     const newBlackouts = new Set(blackouts)
     range.days.forEach((d) => newBlackouts.delete(d))
     setBlackouts(newBlackouts)
+    setBlackoutRecords((prev) => prev.filter((r) => !range.days.includes(r.date)))
     setRemovingRange(null)
   }
 
@@ -192,6 +248,7 @@ export default function AvailabilityPage() {
       const newBlackouts = new Set(blackouts)
       futureDates.forEach((d) => newBlackouts.delete(d))
       setBlackouts(newBlackouts)
+      setBlackoutRecords((prev) => prev.filter((r) => r.date < todayISO))
     }
     setClearingAll(false)
   }
@@ -230,8 +287,14 @@ export default function AvailabilityPage() {
   }
 
   const selectedDateBlocked = selectedDate ? (groupBlackouts[selectedDate] ?? []) : []
-  const futureBlackouts = [...blackouts].filter((d) => d >= todayISO).sort()
-  const futureRanges = collapseToRanges(futureBlackouts)
+  const futureRecords = blackoutRecords.filter((r) => r.date >= todayISO)
+  const futureRanges = collapseToRanges(futureRecords)
+
+  const pendingLabel = pendingDays
+    ? pendingDays.length === 1
+      ? formatDate(pendingDays[0])
+      : `${formatDate(pendingDays[0], { month: 'short', day: 'numeric' })} – ${formatDate(pendingDays[pendingDays.length - 1], { month: 'short', day: 'numeric' })} (${pendingDays.length} days)`
+    : ''
 
   return (
     <main
@@ -239,6 +302,38 @@ export default function AvailabilityPage() {
       onMouseUp={viewMode === 'mine' ? commitDrag : undefined}
       onMouseLeave={viewMode === 'mine' ? commitDrag : undefined}
     >
+      {/* Category picker bottom sheet */}
+      {pendingDays && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => saveWithCategory(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-t-3xl p-6 shadow-2xl">
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <p className="font-bold text-gray-900 text-base mb-0.5">Why are you blocked?</p>
+            <p className="text-sm text-gray-400 mb-5">{pendingLabel}</p>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => saveWithCategory(cat.value)}
+                  disabled={savingCategory}
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-gray-100 active:scale-95 transition-all disabled:opacity-40"
+                >
+                  <span className="text-2xl">{cat.emoji}</span>
+                  <span className="text-xs font-semibold text-gray-700">{cat.label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => saveWithCategory(null)}
+              disabled={savingCategory}
+              className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
+            >
+              Skip — just block the dates
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-md mx-auto px-5">
         <div className="pt-5 pb-1">
           <a href="/" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">← Back</a>
@@ -250,7 +345,6 @@ export default function AvailabilityPage() {
           {viewMode === 'group' && 'See when everyone is blocked.'}
         </p>
 
-        {/* 3-tab toggle */}
         <div className="flex bg-gray-200 rounded-xl p-1 mb-5 gap-1">
           {(['mine', 'list', 'group'] as const).map((mode) => (
             <button
@@ -265,7 +359,7 @@ export default function AvailabilityPage() {
           ))}
         </div>
 
-        {/* ── CALENDAR TAB ── */}
+        {/* ── CALENDAR ── */}
         {viewMode === 'mine' && (
           <>
             {!name && <p className="text-sm text-gray-400 text-center py-8">Select your name in the top right to get started.</p>}
@@ -305,6 +399,9 @@ export default function AvailabilityPage() {
                       const removePreview = isPreview && drag.current?.mode === 'remove'
                       const isToday = iso === todayISO
                       const day = parseInt(iso.split('-')[2])
+                      const record = blackoutRecords.find((r) => r.date === iso)
+                      const cat = CATEGORIES.find((c) => c.value === record?.category)
+
                       return (
                         <div
                           key={iso}
@@ -312,7 +409,7 @@ export default function AvailabilityPage() {
                           onMouseDown={() => startDrag(iso)}
                           onMouseEnter={() => moveDrag(iso)}
                           className={[
-                            'aspect-square flex items-center justify-center rounded-lg text-sm font-medium transition-colors',
+                            'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors relative',
                             isPast ? 'text-gray-200 cursor-default' : 'cursor-pointer',
                             !isPast && isBlocked && !isPreview ? 'bg-red-500 text-white' : '',
                             !isPast && addPreview ? 'bg-red-300 text-white' : '',
@@ -321,19 +418,33 @@ export default function AvailabilityPage() {
                             isToday && !isBlocked && !isPreview ? 'ring-2 ring-blue-400 ring-offset-1' : '',
                           ].join(' ')}
                         >
-                          {day}
+                          <span className="leading-none">{day}</span>
+                          {cat && isBlocked && !isPreview && (
+                            <span className="text-[9px] leading-none mt-0.5 opacity-80">{cat.emoji}</span>
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 </div>
+
+                {/* Category legend */}
+                {blackoutRecords.some((r) => r.category) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {CATEGORIES.filter((c) => blackoutRecords.some((r) => r.category === c.value)).map((c) => (
+                      <span key={c.value} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${CATEGORY_COLORS[c.value]}`}>
+                        {c.emoji} {c.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <p className="text-xs text-gray-400 text-center mt-3">Tap or drag to block · tap again to unblock</p>
               </div>
             )}
           </>
         )}
 
-        {/* ── MY BLOCKS TAB ── */}
+        {/* ── MY BLOCKS ── */}
         {viewMode === 'list' && (
           <>
             {!name && <p className="text-sm text-gray-400 text-center py-8">Select your name in the top right to get started.</p>}
@@ -342,13 +453,13 @@ export default function AvailabilityPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">
-                      {futureBlackouts.length} date{futureBlackouts.length !== 1 ? 's' : ''} blocked
+                      {futureRecords.length} date{futureRecords.length !== 1 ? 's' : ''} blocked
                     </p>
-                    {futureBlackouts.length > 0 && (
-                      <p className="text-xs text-gray-400 mt-0.5">Next: {formatDate(futureBlackouts[0])}</p>
+                    {futureRecords.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-0.5">Next: {formatDate(futureRecords.sort((a,b) => a.date.localeCompare(b.date))[0].date)}</p>
                     )}
                   </div>
-                  {futureBlackouts.length > 0 && (
+                  {futureRecords.length > 0 && (
                     <button
                       onClick={clearAllFuture}
                       disabled={clearingAll}
@@ -389,13 +500,22 @@ export default function AvailabilityPage() {
                         ? formatDate(range.start)
                         : `${formatDate(range.start, { month: 'short', day: 'numeric' })} – ${formatDate(range.end, { month: 'short', day: 'numeric' })}`
                       const sub = isSingleDay ? null : `${range.days.length} days`
+                      const cat = CATEGORIES.find((c) => c.value === range.category)
+
                       return (
                         <div key={range.start} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
                             <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{label}</p>
-                              {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{label}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {sub && <p className="text-xs text-gray-400">{sub}</p>}
+                                {cat && (
+                                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${CATEGORY_COLORS[cat.value]}`}>
+                                    {cat.emoji} {cat.label}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <button
@@ -415,7 +535,7 @@ export default function AvailabilityPage() {
           </>
         )}
 
-        {/* ── GROUP TAB ── */}
+        {/* ── GROUP ── */}
         {viewMode === 'group' && (
           <div>
             {groupLoading && <p className="text-sm text-gray-400 text-center py-8">Loading...</p>}
