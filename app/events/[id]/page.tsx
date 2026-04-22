@@ -322,8 +322,62 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     : 0
 
   if (!event) return (
-    <main className="min-h-screen bg-gray-50 p-5 max-w-md mx-auto">
-      <p className="text-sm text-gray-400 pt-10 text-center">Loading...</p>
+    <main className="min-h-screen bg-gray-50 pb-10">
+      <div className="max-w-md mx-auto px-5 animate-pulse">
+        {/* Back link */}
+        <div className="pt-5 pb-1">
+          <div className="h-4 w-16 bg-gray-200 rounded-full" />
+        </div>
+
+        {/* Event header skeleton */}
+        <div className="mt-4 mb-5">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 space-y-2.5">
+              <div className="h-7 bg-gray-200 rounded-xl w-3/4" />
+              <div className="h-4 bg-gray-100 rounded-lg w-full" />
+              <div className="h-3 bg-gray-100 rounded-lg w-1/3" />
+            </div>
+            <div className="h-6 w-20 bg-gray-200 rounded-full shrink-0 mt-1" />
+          </div>
+        </div>
+
+        {/* Voting key skeleton */}
+        <div className="flex gap-2 mb-4">
+          {[56, 64, 48, 96].map((w) => (
+            <div key={w} className="h-7 bg-gray-200 rounded-lg" style={{ width: w }} />
+          ))}
+        </div>
+
+        {/* Date option cards skeleton */}
+        <div className="flex flex-col gap-3 mb-5">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 bg-gray-200 rounded-lg w-40" />
+                  <div className="flex gap-2">
+                    <div className="h-4 bg-gray-100 rounded-full w-20" />
+                    <div className="h-4 bg-gray-100 rounded-full w-24" />
+                  </div>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  {[1, 2, 3].map((b) => (
+                    <div key={b} className="h-8 w-12 bg-gray-100 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Propose dates card skeleton */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="h-3 w-28 bg-gray-200 rounded-full mb-1" />
+          <div className="h-3 w-48 bg-gray-100 rounded-full mb-4" />
+          <div className="h-[260px] bg-gray-100 rounded-xl mb-3" />
+          <div className="h-11 bg-gray-100 rounded-xl" />
+        </div>
+      </div>
     </main>
   )
 
