@@ -6,11 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
 import { ensureUser } from '@/lib/ensureUser'
 
-const FRIENDS = [
-  'Tad', 'Grace', 'Liam', 'Mcguire', 'Carter', 'Storm',
-  'Megan', 'Margaret', 'Mary Hannah', 'Jonah', 'Katie', 'Eston & Irelynn',
-]
-
 type Event = {
   id: string
   title: string
@@ -25,7 +20,7 @@ type Event = {
 }
 
 export default function EventsPage() {
-  const [name, setName] = useName()
+  const [name] = useName()
   const [events, setEvents] = useState<Event[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -127,26 +122,6 @@ export default function EventsPage() {
           )}
         </div>
         <p className="text-sm text-gray-500 mb-5">Vote on dates for upcoming events.</p>
-
-        {/* Name picker */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Who are you?</p>
-          <div className="flex flex-wrap gap-2">
-            {FRIENDS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setName(f)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                  name === f
-                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-600'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Create form */}
         {showForm && name && (

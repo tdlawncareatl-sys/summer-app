@@ -5,11 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
 
-const FRIENDS = [
-  'Tad', 'Grace', 'Liam', 'Mcguire', 'Carter', 'Storm',
-  'Megan', 'Margaret', 'Mary Hannah', 'Jonah', 'Katie', 'Eston & Irelynn',
-]
-
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
@@ -36,7 +31,7 @@ export default function AvailabilityPage() {
   const today = new Date()
   const todayISO = today.toISOString().split('T')[0]
 
-  const [name, setName] = useName()
+  const [name] = useName()
   const [userId, setUserId] = useState<string | null>(null)
   const [blackouts, setBlackouts] = useState<Set<string>>(new Set())
   const [saved, setSaved] = useState(false)
@@ -163,7 +158,7 @@ export default function AvailabilityPage() {
   }
 
   // Group view color logic
-  const TOTAL_FRIENDS = FRIENDS.length
+  const TOTAL_FRIENDS = 12
   function groupCellColor(iso: string) {
     const blocked = groupBlackouts[iso]?.length ?? 0
     if (blocked === 0) return 'bg-gray-50 text-gray-700'
@@ -208,25 +203,6 @@ export default function AvailabilityPage() {
       {/* ── MY SCHEDULE ── */}
       {viewMode === 'mine' && (
         <>
-          <div className="mb-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Who are you?</p>
-            <div className="flex flex-wrap gap-2">
-              {FRIENDS.map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setName(f)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                    name === f
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {name && !userId && <p className="text-sm text-gray-400 text-center py-8">Loading...</p>}
 
           {name && userId && (

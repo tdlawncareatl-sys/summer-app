@@ -3,15 +3,8 @@ import Link from 'next/link'
 export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 flex flex-col">
-      {/* Hero */}
-      <div className="px-6 pt-14 pb-8 text-center">
-        <div className="text-5xl mb-3">☀️</div>
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Summer Plans</h1>
-        <p className="text-gray-500 mt-2 text-sm">The group&apos;s coordination HQ</p>
-      </div>
-
       {/* Nav cards */}
-      <div className="flex-1 px-5 pb-10 max-w-md w-full mx-auto flex flex-col gap-3">
+      <div className="flex-1 px-5 pt-6 pb-10 max-w-md w-full mx-auto flex flex-col gap-3">
         <Link
           href="/availability"
           className="group flex items-center gap-4 p-5 rounded-2xl bg-white border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all active:scale-[0.98]"

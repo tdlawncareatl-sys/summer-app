@@ -5,11 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
 
-const FRIENDS = [
-  'Tad', 'Grace', 'Liam', 'Mcguire', 'Carter', 'Storm',
-  'Megan', 'Margaret', 'Mary Hannah', 'Jonah', 'Katie', 'Eston & Irelynn',
-]
-const TOTAL_FRIENDS = FRIENDS.length
+const TOTAL_FRIENDS = 12
 
 const RESPONSE_OPTIONS = [
   { label: 'Best', value: 'best', points: 3, light: 'bg-green-100 text-green-700 border-green-300' },
@@ -85,7 +81,7 @@ function calendarCellColor(blockedCount: number): string {
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [name, setName] = useName()
+  const [name] = useName()
   const [event, setEvent] = useState<Event | null>(null)
   const [dateOptions, setDateOptions] = useState<DateOption[]>([])
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
@@ -306,26 +302,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               {confirming ? 'Confirming...' : `Mark as Confirmed — ${formatDate(topOption.date)}`}
             </button>
           )}
-        </div>
-
-        {/* Name picker */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Who are you?</p>
-          <div className="flex flex-wrap gap-2">
-            {FRIENDS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setName(f)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                  name === f
-                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-600'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Best available dates */}
