@@ -219,6 +219,22 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setVoting(dateOptionId)
     const userId = await ensureUser(name)
 
+    // "Best" is exclusive — clear it from every other option first
+    if (response === 'best') {
+      const otherIds = dateOptions.filter((o) => o.id !== dateOptionId).map((o) => o.id)
+      if (otherIds.length > 0) {
+        const { data: prevBest } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('response', 'best')
+          .in('date_option_id', otherIds)
+        if (prevBest && prevBest.length > 0) {
+          await supabase.from('votes').delete().in('id', prevBest.map((v) => v.id))
+        }
+      }
+    }
+
     const { data: existing } = await supabase
       .from('votes')
       .select('id, response')
@@ -228,6 +244,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
     if (existing) {
       if (existing.response === response) {
+        // Clicking same response again removes it
         await supabase.from('votes').delete().eq('id', existing.id)
       } else {
         await supabase.from('votes').update({ response, points }).eq('id', existing.id)
@@ -310,6 +327,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const hasVotes = (topOption?.votes.length ?? 0) > 0
   const isLeading = hasVotes && (!secondOption || topOption.conflictScore > secondOption.conflictScore)
   const showConfirm = event?.status !== 'confirmed' && isLeading
+
+  // The option where the current user has voted "Best" (only one allowed)
+  const myBestOptionId = dateOptions.find((o) => myVote(o) === 'best')?.id ?? null
 
   // Conflict count across all days in selected range
   const selectedConflicts = selectedRange
@@ -521,20 +541,28 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   </div>
                   {name && (
                     <div className="flex gap-1.5 shrink-0">
-                      {RESPONSE_OPTIONS.map((r) => (
-                        <button
-                          key={r.value}
-                          onClick={() => vote(option.id, r.value, r.points)}
-                          disabled={voting === option.id}
-                          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
-                            my === r.value
-                              ? `${r.light} scale-105`
-                              : 'bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-300'
-                          }`}
-                        >
-                          {r.label}
-                        </button>
-                      ))}
+                      {RESPONSE_OPTIONS.map((r) => {
+                        const isActive = my === r.value
+                        // "Best" is locked to one option — dim it everywhere else once picked
+                        const bestTaken = r.value === 'best' && myBestOptionId !== null && myBestOptionId !== option.id
+                        return (
+                          <button
+                            key={r.value}
+                            onClick={() => vote(option.id, r.value, r.points)}
+                            disabled={voting === option.id}
+                            title={bestTaken ? 'You already picked Best for another date — click to move it here' : undefined}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                              isActive
+                                ? `${r.light} scale-105`
+                                : bestTaken
+                                  ? 'bg-gray-50 text-gray-200 border-gray-100 cursor-pointer'
+                                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-300'
+                            }`}
+                          >
+                            {r.label}
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
