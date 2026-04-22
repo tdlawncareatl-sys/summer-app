@@ -17,6 +17,8 @@ type Idea = {
   likes: number
 }
 
+function getLikedKey(n: string) { return `summer-likes-${n}` }
+
 export default function IdeasPage() {
   const [name, setName] = useName()
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -24,10 +26,18 @@ export default function IdeasPage() {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const [likingId, setLikingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadIdeas() }, [])
+
+  // Load persisted likes when name is set
+  useEffect(() => {
+    if (!name) return
+    const stored = localStorage.getItem(getLikedKey(name))
+    setLikedIds(stored ? new Set(JSON.parse(stored)) : new Set())
+  }, [name])
 
   async function loadIdeas() {
     setLoading(true)
@@ -57,15 +67,25 @@ export default function IdeasPage() {
   }
 
   async function toggleLike(idea: Idea) {
+    if (!name || likingId === idea.id) return
+    setLikingId(idea.id)
+
     const alreadyLiked = likedIds.has(idea.id)
+
+    // Update liked state + persist to localStorage
+    const newLiked = new Set(likedIds)
+    alreadyLiked ? newLiked.delete(idea.id) : newLiked.add(idea.id)
+    setLikedIds(newLiked)
+    localStorage.setItem(getLikedKey(name), JSON.stringify([...newLiked]))
+
+    // Optimistic UI update
     const newLikes = alreadyLiked ? idea.likes - 1 : idea.likes + 1
-    setLikedIds((prev) => {
-      const next = new Set(prev)
-      alreadyLiked ? next.delete(idea.id) : next.add(idea.id)
-      return next
-    })
     setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, likes: newLikes } : i))
+
+    // Write to DB then reload for accurate count
     await supabase.from('ideas').update({ likes: newLikes }).eq('id', idea.id)
+    await loadIdeas()
+    setLikingId(null)
   }
 
   async function deleteIdea(idea: Idea) {
@@ -161,7 +181,8 @@ export default function IdeasPage() {
                 {/* Like button */}
                 <button
                   onClick={() => toggleLike(idea)}
-                  className={`flex flex-col items-center min-w-[44px] rounded-xl py-2 px-2 transition-all active:scale-90 ${
+                  disabled={!name || likingId === idea.id}
+                  className={`flex flex-col items-center min-w-[44px] rounded-xl py-2 px-2 transition-all active:scale-90 disabled:opacity-50 ${
                     likedIds.has(idea.id)
                       ? 'bg-green-100 text-green-600'
                       : 'bg-gray-50 text-gray-400 hover:bg-green-50 hover:text-green-500'
