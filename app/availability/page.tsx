@@ -11,23 +11,6 @@ const MONTH_NAMES = [
 ]
 const DAY_LABELS = ['Su','Mo','Tu','We','Th','Fr','Sa']
 
-const CATEGORIES = [
-  { value: 'travel',   label: 'Travel',       emoji: '✈️' },
-  { value: 'work',     label: 'Work',          emoji: '💼' },
-  { value: 'family',   label: 'Family',        emoji: '👨‍👩‍👧' },
-  { value: 'plans',    label: 'Prior Plans',   emoji: '🎉' },
-  { value: 'personal', label: 'Personal',      emoji: '🏥' },
-  { value: 'other',    label: 'Other',         emoji: '📌' },
-]
-
-const CATEGORY_COLORS: Record<string, string> = {
-  travel:   'bg-blue-100 text-blue-700 border-blue-200',
-  work:     'bg-gray-100 text-gray-700 border-gray-200',
-  family:   'bg-orange-100 text-orange-700 border-orange-200',
-  plans:    'bg-purple-100 text-purple-700 border-purple-200',
-  personal: 'bg-pink-100 text-pink-700 border-pink-200',
-  other:    'bg-teal-100 text-teal-700 border-teal-200',
-}
 
 function getRange(a: string, b: string): string[] {
   const start = new Date(a + 'T12:00:00')
@@ -92,8 +75,9 @@ export default function AvailabilityPage() {
   const [previewDays, setPreviewDays] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'mine' | 'list' | 'group'>('mine')
 
-  // Category picker sheet
+  // Label sheet
   const [pendingDays, setPendingDays] = useState<string[] | null>(null)
+  const [pendingLabel, setPendingLabel] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
 
   // Group view
@@ -205,6 +189,7 @@ export default function AvailabilityPage() {
       const toAdd = days.filter((d) => !blackouts.has(d))
       if (toAdd.length) {
         setPendingDays(toAdd)
+        setPendingLabel('')
       }
     }
   }
@@ -290,7 +275,7 @@ export default function AvailabilityPage() {
   const futureRecords = blackoutRecords.filter((r) => r.date >= todayISO)
   const futureRanges = collapseToRanges(futureRecords)
 
-  const pendingLabel = pendingDays
+  const pendingDateLabel = pendingDays
     ? pendingDays.length === 1
       ? formatDate(pendingDays[0])
       : `${formatDate(pendingDays[0], { month: 'short', day: 'numeric' })} – ${formatDate(pendingDays[pendingDays.length - 1], { month: 'short', day: 'numeric' })} (${pendingDays.length} days)`
@@ -302,33 +287,36 @@ export default function AvailabilityPage() {
       onMouseUp={viewMode === 'mine' ? commitDrag : undefined}
       onMouseLeave={viewMode === 'mine' ? commitDrag : undefined}
     >
-      {/* Category picker bottom sheet */}
+      {/* Label bottom sheet */}
       {pendingDays && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => saveWithCategory(null)} />
           <div className="relative w-full max-w-md bg-white rounded-t-3xl p-6 shadow-2xl">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <p className="font-bold text-gray-900 text-base mb-0.5">Why are you blocked?</p>
-            <p className="text-sm text-gray-400 mb-5">{pendingLabel}</p>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.value}
-                  onClick={() => saveWithCategory(cat.value)}
-                  disabled={savingCategory}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-2xl border border-gray-100 bg-gray-50 hover:bg-gray-100 active:scale-95 transition-all disabled:opacity-40"
-                >
-                  <span className="text-2xl">{cat.emoji}</span>
-                  <span className="text-xs font-semibold text-gray-700">{cat.label}</span>
-                </button>
-              ))}
-            </div>
+            <p className="font-bold text-gray-900 text-base mb-0.5">What&apos;s this for?</p>
+            <p className="text-sm text-gray-400 mb-4">{pendingDateLabel}</p>
+            <input
+              type="text"
+              autoFocus
+              placeholder="e.g. Beach trip, Work conference, Family visit..."
+              value={pendingLabel}
+              onChange={(e) => setPendingLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveWithCategory(pendingLabel.trim() || null) }}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+            />
+            <button
+              onClick={() => saveWithCategory(pendingLabel.trim() || null)}
+              disabled={savingCategory}
+              className="w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-bold mb-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-40"
+            >
+              {savingCategory ? 'Saving...' : 'Save'}
+            </button>
             <button
               onClick={() => saveWithCategory(null)}
               disabled={savingCategory}
               className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
             >
-              Skip — just block the dates
+              Skip
             </button>
           </div>
         </div>
@@ -400,7 +388,6 @@ export default function AvailabilityPage() {
                       const isToday = iso === todayISO
                       const day = parseInt(iso.split('-')[2])
                       const record = blackoutRecords.find((r) => r.date === iso)
-                      const cat = CATEGORIES.find((c) => c.value === record?.category)
 
                       return (
                         <div
@@ -409,7 +396,7 @@ export default function AvailabilityPage() {
                           onMouseDown={() => startDrag(iso)}
                           onMouseEnter={() => moveDrag(iso)}
                           className={[
-                            'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors relative',
+                            'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors',
                             isPast ? 'text-gray-200 cursor-default' : 'cursor-pointer',
                             !isPast && isBlocked && !isPreview ? 'bg-red-500 text-white' : '',
                             !isPast && addPreview ? 'bg-red-300 text-white' : '',
@@ -419,8 +406,8 @@ export default function AvailabilityPage() {
                           ].join(' ')}
                         >
                           <span className="leading-none">{day}</span>
-                          {cat && isBlocked && !isPreview && (
-                            <span className="text-[9px] leading-none mt-0.5 opacity-80">{cat.emoji}</span>
+                          {record?.category && isBlocked && !isPreview && (
+                            <span className="text-[8px] leading-none mt-0.5 opacity-70">●</span>
                           )}
                         </div>
                       )
@@ -428,16 +415,6 @@ export default function AvailabilityPage() {
                   </div>
                 </div>
 
-                {/* Category legend */}
-                {blackoutRecords.some((r) => r.category) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {CATEGORIES.filter((c) => blackoutRecords.some((r) => r.category === c.value)).map((c) => (
-                      <span key={c.value} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${CATEGORY_COLORS[c.value]}`}>
-                        {c.emoji} {c.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
                 <p className="text-xs text-gray-400 text-center mt-3">Tap or drag to block · tap again to unblock</p>
               </div>
             )}
@@ -500,8 +477,6 @@ export default function AvailabilityPage() {
                         ? formatDate(range.start)
                         : `${formatDate(range.start, { month: 'short', day: 'numeric' })} – ${formatDate(range.end, { month: 'short', day: 'numeric' })}`
                       const sub = isSingleDay ? null : `${range.days.length} days`
-                      const cat = CATEGORIES.find((c) => c.value === range.category)
-
                       return (
                         <div key={range.start} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
@@ -510,10 +485,8 @@ export default function AvailabilityPage() {
                               <p className="text-sm font-semibold text-gray-900 truncate">{label}</p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 {sub && <p className="text-xs text-gray-400">{sub}</p>}
-                                {cat && (
-                                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${CATEGORY_COLORS[cat.value]}`}>
-                                    {cat.emoji} {cat.label}
-                                  </span>
+                                {range.category && (
+                                  <span className="text-xs text-gray-500 font-medium">{range.category}</span>
                                 )}
                               </div>
                             </div>
