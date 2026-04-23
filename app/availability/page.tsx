@@ -1,16 +1,23 @@
 'use client'
 
+// Availability — personal blackout dates.
+//  - Calendar: drag-select to add/remove blackouts; label sheet captures why.
+//  - My Blocks: list view of your future blackouts + event conflicts.
+//  - Group: heatmap of when the crew is collectively blocked.
+//
+// Restyled to the earthy baseline. Logic unchanged.
+
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
+import PageHeader from '../components/PageHeader'
+import Card from '../components/Card'
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from '../components/icons'
 
-const MONTH_NAMES = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-]
-const DAY_LABELS = ['Su','Mo','Tu','We','Th','Fr','Sa']
-
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAY_LABELS = ['S','M','T','W','T','F','S']
+const TOTAL_FRIENDS = 12
 
 function getRange(a: string, b: string): string[] {
   const start = new Date(a + 'T12:00:00')
@@ -18,10 +25,7 @@ function getRange(a: string, b: string): string[] {
   const [s, e] = start <= end ? [start, end] : [end, start]
   const days: string[] = []
   const cur = new Date(s)
-  while (cur <= e) {
-    days.push(cur.toISOString().split('T')[0])
-    cur.setDate(cur.getDate() + 1)
-  }
+  while (cur <= e) { days.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1) }
   return days
 }
 
@@ -42,7 +46,6 @@ function collapseToRanges(records: BlackoutRecord[]): DateRange[] {
   let rangeDays = [sorted[0].date]
   let rangeCategory = sorted[0].category
   let prev = sorted[0].date
-
   for (let i = 1; i < sorted.length; i++) {
     const cur = sorted[i]
     const diff = (new Date(cur.date + 'T12:00:00').getTime() - new Date(prev + 'T12:00:00').getTime()) / 86400000
@@ -75,17 +78,14 @@ export default function AvailabilityPage() {
   const [previewDays, setPreviewDays] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'mine' | 'list' | 'group'>('mine')
 
-  // Label sheet
   const [pendingDays, setPendingDays] = useState<string[] | null>(null)
   const [pendingLabel, setPendingLabel] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
 
-  // Group view
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
   const [groupLoading, setGroupLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  // My Blocks
   const [eventConflicts, setEventConflicts] = useState<EventConflict[]>([])
   const [removingRange, setRemovingRange] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
@@ -103,11 +103,11 @@ export default function AvailabilityPage() {
   useEffect(() => {
     if (viewMode === 'group') loadGroupBlackouts()
     if (viewMode === 'list' && userId) loadEventConflicts()
-  }, [viewMode, userId])
+  }, [viewMode, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (viewMode === 'list' && userId) loadEventConflicts()
-  }, [blackouts])
+  }, [blackouts]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadUser(n: string) {
     const uid = await ensureUser(n)
@@ -130,8 +130,7 @@ export default function AvailabilityPage() {
     for (const row of avail ?? []) {
       const friendName = userMap[row.user_id]
       if (!friendName) continue
-      if (!result[row.date]) result[row.date] = []
-      result[row.date].push(friendName)
+      ;(result[row.date] ??= []).push(friendName)
     }
     setGroupBlackouts(result)
     setGroupLoading(false)
@@ -158,12 +157,10 @@ export default function AvailabilityPage() {
     drag.current = { mode: blackouts.has(iso) ? 'remove' : 'add', start: iso }
     setPreviewDays(new Set([iso]))
   }
-
   function moveDrag(iso: string) {
     if (!drag.current || iso < todayISO) return
     setPreviewDays(new Set(getRange(drag.current.start, iso)))
   }
-
   async function commitDrag() {
     if (!drag.current || !userId || previewDays.size === 0) {
       drag.current = null; setPreviewDays(new Set()); return
@@ -182,24 +179,17 @@ export default function AvailabilityPage() {
         setBlackouts(newBlackouts)
         setBlackoutRecords((prev) => prev.filter((r) => !toRemove.includes(r.date)))
       }
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      setSaved(true); setTimeout(() => setSaved(false), 2000)
     } else {
-      // Add — show category picker first
       const toAdd = days.filter((d) => !blackouts.has(d))
-      if (toAdd.length) {
-        setPendingDays(toAdd)
-        setPendingLabel('')
-      }
+      if (toAdd.length) { setPendingDays(toAdd); setPendingLabel('') }
     }
   }
 
   async function saveWithCategory(category: string | null) {
     if (!pendingDays || !userId) return
     setSavingCategory(true)
-    await supabase.from('availability').insert(
-      pendingDays.map((date) => ({ user_id: userId, date, category }))
-    )
+    await supabase.from('availability').insert(pendingDays.map((date) => ({ user_id: userId, date, category })))
     const newBlackouts = new Set(blackouts)
     pendingDays.forEach((d) => newBlackouts.add(d))
     setBlackouts(newBlackouts)
@@ -209,8 +199,7 @@ export default function AvailabilityPage() {
     ])
     setPendingDays(null)
     setSavingCategory(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
 
   async function removeRange(range: DateRange) {
@@ -254,21 +243,16 @@ export default function AvailabilityPage() {
   ]
   while (cells.length % 7 !== 0) cells.push(null)
 
-  function prevMonth() {
-    if (month === 0) { setMonth(11); setYear((y) => y - 1) } else setMonth((m) => m - 1)
-  }
-  function nextMonth() {
-    if (month === 11) { setMonth(0); setYear((y) => y + 1) } else setMonth((m) => m + 1)
-  }
+  function prevMonth() { if (month === 0) { setMonth(11); setYear((y) => y - 1) } else setMonth((m) => m - 1) }
+  function nextMonth() { if (month === 11) { setMonth(0); setYear((y) => y + 1) } else setMonth((m) => m + 1) }
 
-  const TOTAL_FRIENDS = 12
-  function groupCellColor(iso: string) {
+  function groupCellTint(iso: string) {
     const blocked = groupBlackouts[iso]?.length ?? 0
-    if (blocked === 0) return 'bg-gray-50 text-gray-700'
+    if (blocked === 0) return 'bg-sand text-ink'
     const ratio = blocked / TOTAL_FRIENDS
-    if (ratio < 0.25) return 'bg-yellow-100 text-yellow-800'
-    if (ratio < 0.5) return 'bg-yellow-300 text-yellow-900'
-    return 'bg-red-400 text-white'
+    if (ratio < 0.25) return 'bg-amber-tint text-amber'
+    if (ratio < 0.5)  return 'bg-amber-soft text-amber'
+    return 'bg-blush-soft text-blush'
   }
 
   const selectedDateBlocked = selectedDate ? (groupBlackouts[selectedDate] ?? []) : []
@@ -278,43 +262,53 @@ export default function AvailabilityPage() {
   const pendingDateLabel = pendingDays
     ? pendingDays.length === 1
       ? formatDate(pendingDays[0])
-      : `${formatDate(pendingDays[0], { month: 'short', day: 'numeric' })} – ${formatDate(pendingDays[pendingDays.length - 1], { month: 'short', day: 'numeric' })} (${pendingDays.length} days)`
+      : `${formatDate(pendingDays[0], { month: 'short', day: 'numeric' })} – ${formatDate(pendingDays[pendingDays.length - 1], { month: 'short', day: 'numeric' })} · ${pendingDays.length} days`
     : ''
 
   return (
     <main
-      className="min-h-screen bg-gray-50 pb-10 select-none"
+      className="max-w-md mx-auto px-5 no-select"
       onMouseUp={viewMode === 'mine' ? commitDrag : undefined}
       onMouseLeave={viewMode === 'mine' ? commitDrag : undefined}
     >
+      <PageHeader
+        variant="title"
+        title="Availability"
+        subtitle={
+          viewMode === 'mine' ? 'Block dates you can\u2019t make it. Drag for a range.'
+          : viewMode === 'list' ? 'Review and manage your blocked dates.'
+          : 'When the crew is collectively blocked.'
+        }
+      />
+
       {/* Label bottom sheet */}
       {pendingDays && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => saveWithCategory(null)} />
-          <div className="relative w-full max-w-md bg-white rounded-t-3xl p-6 shadow-2xl">
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <p className="font-bold text-gray-900 text-base mb-0.5">What&apos;s this for?</p>
-            <p className="text-sm text-gray-400 mb-4">{pendingDateLabel}</p>
+          <div className="absolute inset-0 bg-ink/30 backdrop-blur-sm" onClick={() => saveWithCategory(null)} />
+          <div className="relative w-full max-w-md bg-cream rounded-t-[28px] p-6 shadow-[var(--shadow-raised)]">
+            <div className="w-10 h-1 bg-stone rounded-full mx-auto mb-5" />
+            <p className="font-serif text-xl font-black text-ink">What&apos;s this for?</p>
+            <p className="text-sm text-ink-soft mt-0.5 mb-4">{pendingDateLabel}</p>
             <input
               type="text"
               autoFocus
-              placeholder="e.g. Beach trip, Work conference, Family visit..."
+              placeholder="e.g. Beach trip, Work travel, Family"
               value={pendingLabel}
               onChange={(e) => setPendingLabel(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') saveWithCategory(pendingLabel.trim() || null) }}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+              className="w-full bg-sand border-0 rounded-xl px-4 py-3 text-sm text-ink mb-3 focus:outline-none focus:ring-2 focus:ring-olive transition"
             />
             <button
               onClick={() => saveWithCategory(pendingLabel.trim() || null)}
               disabled={savingCategory}
-              className="w-full bg-gray-900 text-white rounded-xl py-3 text-sm font-bold mb-2 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-40"
+              className="w-full bg-olive text-white rounded-xl py-3 text-sm font-bold mb-2 active:scale-[0.98] transition-all disabled:opacity-40"
             >
-              {savingCategory ? 'Saving...' : 'Save'}
+              {savingCategory ? 'Saving…' : 'Save'}
             </button>
             <button
               onClick={() => saveWithCategory(null)}
               disabled={savingCategory}
-              className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
+              className="w-full text-sm text-ink-soft hover:text-ink py-2 transition-colors"
             >
               Skip
             </button>
@@ -322,279 +316,281 @@ export default function AvailabilityPage() {
         </div>
       )}
 
-      <div className="max-w-md mx-auto px-5">
-        <div className="pt-5 pb-1">
-          <a href="/" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">← Back</a>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mt-4 mb-1">Availability</h1>
-        <p className="text-sm text-gray-500 mb-5">
-          {viewMode === 'mine' && <>Block dates you <span className="font-semibold text-red-500">can&apos;t</span> make it. Drag to select a range.</>}
-          {viewMode === 'list' && 'Review and manage your blocked dates.'}
-          {viewMode === 'group' && 'See when everyone is blocked.'}
-        </p>
+      {/* View toggle */}
+      <div className="flex bg-stone rounded-xl p-1 mb-5 gap-1">
+        {(['mine', 'list', 'group'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => { setViewMode(mode); setSelectedDate(null) }}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              viewMode === mode ? 'bg-cream text-ink shadow-[var(--shadow-soft)]' : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            {mode === 'mine' ? 'Calendar' : mode === 'list' ? 'My blocks' : 'Group'}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex bg-gray-200 rounded-xl p-1 mb-5 gap-1">
-          {(['mine', 'list', 'group'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => { setViewMode(mode); setSelectedDate(null) }}
-              className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                viewMode === mode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {mode === 'mine' ? 'Calendar' : mode === 'list' ? 'My Blocks' : 'Group'}
-            </button>
-          ))}
-        </div>
-
-        {/* ── CALENDAR ── */}
-        {viewMode === 'mine' && (
-          <>
-            {!name && <p className="text-sm text-gray-400 text-center py-8">Select your name in the top right to get started.</p>}
-            {name && !userId && <p className="text-sm text-gray-400 text-center py-8">Loading...</p>}
-            {name && userId && (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm text-gray-600">
-                    <span className="font-bold text-red-500">{blackouts.size}</span> date{blackouts.size !== 1 ? 's' : ''} blocked
-                  </p>
-                  {saved && <span className="text-xs font-semibold text-green-600">Saved ✓</span>}
-                </div>
-
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white">
-                    <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-lg transition">‹</button>
-                    <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
-                    <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-lg transition">›</button>
-                  </div>
-                  <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-100">
-                    {DAY_LABELS.map((d) => (
-                      <div key={d} className="text-center text-xs font-semibold text-gray-400 py-2">{d}</div>
-                    ))}
-                  </div>
-                  <div
-                    className="grid grid-cols-7 gap-0.5 p-3"
-                    onTouchStart={(e) => { const iso = isoFromTouch(e.touches[0]); if (iso) startDrag(iso) }}
-                    onTouchMove={(e) => { e.preventDefault(); const iso = isoFromTouch(e.touches[0]); if (iso) moveDrag(iso) }}
-                    onTouchEnd={commitDrag}
-                  >
-                    {cells.map((iso, i) => {
-                      if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
-                      const isPast = iso < todayISO
-                      const isBlocked = blackouts.has(iso)
-                      const isPreview = previewDays.has(iso)
-                      const addPreview = isPreview && drag.current?.mode === 'add'
-                      const removePreview = isPreview && drag.current?.mode === 'remove'
-                      const isToday = iso === todayISO
-                      const day = parseInt(iso.split('-')[2])
-                      const record = blackoutRecords.find((r) => r.date === iso)
-
-                      return (
-                        <div
-                          key={iso}
-                          data-iso={iso}
-                          onMouseDown={() => startDrag(iso)}
-                          onMouseEnter={() => moveDrag(iso)}
-                          className={[
-                            'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors',
-                            isPast ? 'text-gray-200 cursor-default' : 'cursor-pointer',
-                            !isPast && isBlocked && !isPreview ? 'bg-red-500 text-white' : '',
-                            !isPast && addPreview ? 'bg-red-300 text-white' : '',
-                            !isPast && removePreview ? 'bg-gray-200 text-gray-400' : '',
-                            !isPast && !isBlocked && !isPreview ? 'text-gray-800 hover:bg-gray-100' : '',
-                            isToday && !isBlocked && !isPreview ? 'ring-2 ring-blue-400 ring-offset-1' : '',
-                          ].join(' ')}
-                        >
-                          <span className="leading-none">{day}</span>
-                          {record?.category && isBlocked && !isPreview && (
-                            <span className="text-[8px] leading-none mt-0.5 opacity-70">●</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <p className="text-xs text-gray-400 text-center mt-3">Tap or drag to block · tap again to unblock</p>
+      {/* ── CALENDAR ── */}
+      {viewMode === 'mine' && (
+        <>
+          {!name && <p className="text-sm text-ink-soft text-center py-8">Set your name to get started.</p>}
+          {name && !userId && <div className="h-64 bg-cream rounded-[var(--radius-lg)] animate-pulse" />}
+          {name && userId && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-ink-soft">
+                  <span className="font-bold text-blush">{blackouts.size}</span> date{blackouts.size !== 1 ? 's' : ''} blocked
+                </p>
+                {saved && <span className="text-xs font-semibold text-olive">Saved ✓</span>}
               </div>
-            )}
-          </>
-        )}
 
-        {/* ── MY BLOCKS ── */}
-        {viewMode === 'list' && (
-          <>
-            {!name && <p className="text-sm text-gray-400 text-center py-8">Select your name in the top right to get started.</p>}
-            {name && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {futureRecords.length} date{futureRecords.length !== 1 ? 's' : ''} blocked
-                    </p>
-                    {futureRecords.length > 0 && (
-                      <p className="text-xs text-gray-400 mt-0.5">Next: {formatDate(futureRecords.sort((a,b) => a.date.localeCompare(b.date))[0].date)}</p>
-                    )}
-                  </div>
-                  {futureRecords.length > 0 && (
-                    <button
-                      onClick={clearAllFuture}
-                      disabled={clearingAll}
-                      className="text-xs font-semibold text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-xl transition-all disabled:opacity-40"
-                    >
-                      {clearingAll ? 'Clearing...' : 'Clear all'}
-                    </button>
-                  )}
+              <Card padded={false} className="overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
+                  <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
+                    <ChevronLeftIcon size={16} />
+                  </button>
+                  <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
+                  <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
+                    <ChevronRightIcon size={16} />
+                  </button>
                 </div>
-
-                {eventConflicts.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
-                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">⚠️ Event conflicts</p>
-                    <div className="flex flex-col gap-2">
-                      {eventConflicts.map((ec) => (
-                        <div key={ec.id}>
-                          <p className="text-sm font-semibold text-amber-900">{ec.title}</p>
-                          <p className="text-xs text-amber-700 mt-0.5">
-                            You&apos;re blocked on: {ec.conflictingDates.map((d) => formatDate(d, { month: 'short', day: 'numeric' })).join(', ')}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {futureRanges.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-4xl mb-3">✅</div>
-                    <p className="text-gray-500 font-semibold">No dates blocked</p>
-                    <p className="text-gray-400 text-sm mt-1">Switch to Calendar to block out dates you can&apos;t make it.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {futureRanges.map((range) => {
-                      const isSingleDay = range.start === range.end
-                      const label = isSingleDay
-                        ? formatDate(range.start)
-                        : `${formatDate(range.start, { month: 'short', day: 'numeric' })} – ${formatDate(range.end, { month: 'short', day: 'numeric' })}`
-                      const sub = isSingleDay ? null : `${range.days.length} days`
-                      return (
-                        <div key={range.start} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{label}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                {sub && <p className="text-xs text-gray-400">{sub}</p>}
-                                {range.category && (
-                                  <span className="text-xs text-gray-500 font-medium">{range.category}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => removeRange(range)}
-                            disabled={removingRange === range.start}
-                            className="text-xs font-semibold text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-300 px-3 py-1.5 rounded-xl transition-all disabled:opacity-40 shrink-0"
-                          >
-                            {removingRange === range.start ? '...' : 'Remove'}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── GROUP ── */}
-        {viewMode === 'group' && (
-          <div>
-            {groupLoading && <p className="text-sm text-gray-400 text-center py-8">Loading...</p>}
-            {!groupLoading && (
-              <>
-                <div className="flex items-center gap-3 mb-4 flex-wrap">
-                  {([
-                    ['bg-gray-100 border border-gray-200', 'Free'],
-                    ['bg-yellow-100 border border-yellow-200', 'Few blocked'],
-                    ['bg-yellow-300', 'Some blocked'],
-                    ['bg-red-400', 'Many blocked'],
-                  ] as const).map(([cls, label]) => (
-                    <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <div className={`w-4 h-4 rounded ${cls}`} />
-                      <span>{label}</span>
-                    </div>
+                <div className="grid grid-cols-7 bg-sand border-b border-sand-alt">
+                  {DAY_LABELS.map((d, i) => (
+                    <div key={i} className="text-center text-[10px] font-bold text-ink-mute py-2 uppercase tracking-wider">{d}</div>
                   ))}
                 </div>
+                <div
+                  className="grid grid-cols-7 gap-0.5 p-3"
+                  onTouchStart={(e) => { const iso = isoFromTouch(e.touches[0]); if (iso) startDrag(iso) }}
+                  onTouchMove={(e) => { e.preventDefault(); const iso = isoFromTouch(e.touches[0]); if (iso) moveDrag(iso) }}
+                  onTouchEnd={commitDrag}
+                >
+                  {cells.map((iso, i) => {
+                    if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
+                    const isPast = iso < todayISO
+                    const isBlocked = blackouts.has(iso)
+                    const isPreview = previewDays.has(iso)
+                    const addPreview = isPreview && drag.current?.mode === 'add'
+                    const removePreview = isPreview && drag.current?.mode === 'remove'
+                    const isToday = iso === todayISO
+                    const day = parseInt(iso.split('-')[2])
+                    const record = blackoutRecords.find((r) => r.date === iso)
 
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 bg-gray-900 text-white">
-                    <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-lg transition">‹</button>
-                    <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
-                    <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-lg transition">›</button>
-                  </div>
-                  <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-100">
-                    {DAY_LABELS.map((d) => (
-                      <div key={d} className="text-center text-xs font-semibold text-gray-400 py-2">{d}</div>
+                    return (
+                      <div
+                        key={iso}
+                        data-iso={iso}
+                        onMouseDown={() => startDrag(iso)}
+                        onMouseEnter={() => moveDrag(iso)}
+                        className={[
+                          'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors',
+                          isPast ? 'text-ink-faint cursor-default' : 'cursor-pointer',
+                          !isPast && isBlocked && !isPreview ? 'bg-blush text-white' : '',
+                          !isPast && addPreview ? 'bg-blush-soft text-blush' : '',
+                          !isPast && removePreview ? 'bg-stone text-ink-soft' : '',
+                          !isPast && !isBlocked && !isPreview ? 'text-ink hover:bg-sand' : '',
+                          isToday && !isBlocked && !isPreview ? 'ring-1 ring-olive' : '',
+                        ].join(' ')}
+                      >
+                        <span className="leading-none">{day}</span>
+                        {record?.category && isBlocked && !isPreview && (
+                          <span className="text-[8px] leading-none mt-0.5 opacity-70">●</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+
+              <p className="text-xs text-ink-mute text-center mt-3">Tap or drag to block · tap again to unblock</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── MY BLOCKS ── */}
+      {viewMode === 'list' && (
+        <>
+          {!name && <p className="text-sm text-ink-soft text-center py-8">Set your name to get started.</p>}
+          {name && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    {futureRecords.length} date{futureRecords.length !== 1 ? 's' : ''} blocked
+                  </p>
+                  {futureRecords.length > 0 && (
+                    <p className="text-xs text-ink-mute mt-0.5">
+                      Next: {formatDate(futureRecords.sort((a, b) => a.date.localeCompare(b.date))[0].date)}
+                    </p>
+                  )}
+                </div>
+                {futureRecords.length > 0 && (
+                  <button
+                    onClick={clearAllFuture}
+                    disabled={clearingAll}
+                    className="text-xs font-semibold text-blush hover:text-blush/80 border border-blush-soft px-3 py-1.5 rounded-xl transition-all disabled:opacity-40"
+                  >
+                    {clearingAll ? 'Clearing…' : 'Clear all'}
+                  </button>
+                )}
+              </div>
+
+              {eventConflicts.length > 0 && (
+                <Card className="bg-amber-tint border border-amber-soft mb-4">
+                  <p className="text-xs font-bold text-amber uppercase tracking-wider mb-2">Event conflicts</p>
+                  <div className="flex flex-col gap-2">
+                    {eventConflicts.map((ec) => (
+                      <div key={ec.id}>
+                        <p className="text-sm font-semibold text-ink">{ec.title}</p>
+                        <p className="text-xs text-ink-soft mt-0.5">
+                          You&apos;re blocked on {ec.conflictingDates.map((d) => formatDate(d, { month: 'short', day: 'numeric' })).join(', ')}
+                        </p>
+                      </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-7 gap-0.5 p-3">
-                    {cells.map((iso, i) => {
-                      if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
-                      const isPast = iso < todayISO
-                      const blockedCount = groupBlackouts[iso]?.length ?? 0
-                      const day = parseInt(iso.split('-')[2])
-                      const colorClass = isPast ? 'bg-gray-50 text-gray-200' : groupCellColor(iso)
-                      const isSelected = selectedDate === iso
-                      return (
-                        <div
-                          key={iso}
-                          onClick={() => { if (!isPast) setSelectedDate(selectedDate === iso ? null : iso) }}
-                          className={[
-                            'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all',
-                            isPast ? 'cursor-default' : 'cursor-pointer hover:opacity-80',
-                            colorClass,
-                            isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : '',
-                            iso === todayISO && !isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : '',
-                          ].join(' ')}
-                        >
-                          <span className="font-semibold leading-none">{day}</span>
-                          {blockedCount > 0 && !isPast && <span className="text-[9px] leading-none mt-0.5 opacity-80">{blockedCount}</span>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+                </Card>
+              )}
 
-                {selectedDate && (
-                  <div className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {formatDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric' })}
-                      </p>
-                      <button onClick={() => setSelectedDate(null)} className="text-gray-300 hover:text-gray-500 text-lg leading-none">×</button>
-                    </div>
-                    {selectedDateBlocked.length === 0 ? (
-                      <p className="text-sm text-green-600 font-medium">Everyone is free!</p>
-                    ) : (
-                      <>
-                        <p className="text-xs text-gray-400 mb-2">{selectedDateBlocked.length} {selectedDateBlocked.length === 1 ? 'person' : 'people'} can&apos;t make it:</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedDateBlocked.sort().map((n) => (
-                            <span key={n} className="text-xs bg-red-50 text-red-700 border border-red-100 px-2 py-0.5 rounded-full font-medium">{n}</span>
-                          ))}
+              {futureRanges.length === 0 ? (
+                <Card className="text-center py-10">
+                  <p className="font-semibold text-ink">No dates blocked</p>
+                  <p className="text-sm text-ink-soft mt-1">Switch to Calendar to block out dates.</p>
+                </Card>
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  {futureRanges.map((range) => {
+                    const isSingleDay = range.start === range.end
+                    const label = isSingleDay
+                      ? formatDate(range.start)
+                      : `${formatDate(range.start, { month: 'short', day: 'numeric' })} – ${formatDate(range.end, { month: 'short', day: 'numeric' })}`
+                    const sub = isSingleDay ? null : `${range.days.length} days`
+                    return (
+                      <Card key={range.start} className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blush shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-ink truncate">{label}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {sub && <p className="text-xs text-ink-mute">{sub}</p>}
+                              {range.category && (
+                                <span className="text-xs text-ink-soft font-medium">{range.category}</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </>
-                    )}
+                        <button
+                          onClick={() => removeRange(range)}
+                          disabled={removingRange === range.start}
+                          className="text-xs font-semibold text-ink-soft hover:text-blush px-3 py-1.5 rounded-xl transition-all disabled:opacity-40 shrink-0 bg-sand hover:bg-sand-alt"
+                        >
+                          {removingRange === range.start ? '…' : 'Remove'}
+                        </button>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── GROUP ── */}
+      {viewMode === 'group' && (
+        <div>
+          {groupLoading && <div className="h-64 bg-cream rounded-[var(--radius-lg)] animate-pulse" />}
+          {!groupLoading && (
+            <>
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
+                {([
+                  ['bg-sand', 'Free'],
+                  ['bg-amber-tint', 'Few blocked'],
+                  ['bg-amber-soft', 'Some'],
+                  ['bg-blush-soft', 'Many'],
+                ] as const).map(([cls, label]) => (
+                  <div key={label} className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+                    <span className={`w-4 h-4 rounded ${cls}`} />
+                    <span>{label}</span>
                   </div>
-                )}
-                <p className="text-xs text-gray-400 text-center mt-3">Tap a date to see who&apos;s blocked</p>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+                ))}
+              </div>
+
+              <Card padded={false} className="overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
+                  <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
+                    <ChevronLeftIcon size={16} />
+                  </button>
+                  <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
+                  <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
+                    <ChevronRightIcon size={16} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-7 bg-sand border-b border-sand-alt">
+                  {DAY_LABELS.map((d, i) => (
+                    <div key={i} className="text-center text-[10px] font-bold text-ink-mute py-2 uppercase tracking-wider">{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5 p-3">
+                  {cells.map((iso, i) => {
+                    if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
+                    const isPast = iso < todayISO
+                    const blockedCount = groupBlackouts[iso]?.length ?? 0
+                    const day = parseInt(iso.split('-')[2])
+                    const tintClass = isPast ? 'bg-sand-alt text-ink-faint' : groupCellTint(iso)
+                    const isSelected = selectedDate === iso
+                    return (
+                      <div
+                        key={iso}
+                        onClick={() => { if (!isPast) setSelectedDate(selectedDate === iso ? null : iso) }}
+                        className={[
+                          'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all',
+                          isPast ? 'cursor-default' : 'cursor-pointer hover:opacity-80',
+                          tintClass,
+                          isSelected ? 'ring-2 ring-olive' : '',
+                          iso === todayISO && !isSelected ? 'ring-1 ring-olive' : '',
+                        ].join(' ')}
+                      >
+                        <span className="font-semibold leading-none">{day}</span>
+                        {blockedCount > 0 && !isPast && <span className="text-[9px] leading-none mt-0.5 opacity-80">{blockedCount}</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+
+              {selectedDate && (
+                <Card className="mt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-semibold text-ink">
+                      {formatDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </p>
+                    <button onClick={() => setSelectedDate(null)} className="text-ink-faint hover:text-ink-soft" aria-label="Close">
+                      <XIcon size={16} />
+                    </button>
+                  </div>
+                  {selectedDateBlocked.length === 0 ? (
+                    <p className="text-sm text-olive font-medium">Everyone is free.</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink-mute mb-2">
+                        {selectedDateBlocked.length} {selectedDateBlocked.length === 1 ? 'person' : 'people'} can&apos;t make it:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedDateBlocked.sort().map((n) => (
+                          <span key={n} className="text-xs bg-blush-tint text-blush px-2 py-0.5 rounded-full font-medium">{n}</span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </Card>
+              )}
+              <p className="text-xs text-ink-mute text-center mt-3">Tap a date to see who&apos;s blocked</p>
+            </>
+          )}
+        </div>
+      )}
     </main>
   )
 }

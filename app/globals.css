@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   Summer Plans — design tokens
+   Earthy, muted, mobile-first.
+   Colors are semantic: never used cosmetically.
+   ───────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --color-sand:      #F7F3EC;  /* page bg — warm off-white */
+  --color-cream:     #FFFBF3;  /* raised cards */
+  --color-stone:     #EFE8DC;  /* alt card / pressed */
+  --color-sand-alt:  #F1EBDF;  /* subtle stripe */
+
+  /* Text */
+  --color-ink:       #2A2923;  /* primary text — warm charcoal */
+  --color-ink-soft:  #6B6A61;  /* secondary text */
+  --color-ink-mute:  #A6A399;  /* tertiary / metadata */
+  --color-ink-faint: #CFCAC0;  /* hints, dots, very-low */
+
+  /* Accents — status-driven */
+  --color-olive:        #6B7F3F;  /* primary / confirmed */
+  --color-olive-soft:   #E6E8CF;
+  --color-olive-tint:   #F3F5E7;
+
+  --color-terracotta:      #C56A3E;  /* voting / energetic */
+  --color-terracotta-soft: #F4D9C9;
+  --color-terracotta-tint: #FBEEE3;
+
+  --color-teal:         #6B8E8C;  /* hosting / travel-water */
+  --color-teal-soft:    #D0DEDC;
+  --color-teal-tint:    #E8EFEE;
+
+  --color-lavender:      #9B92B0;  /* tentative */
+  --color-lavender-soft: #DDD8E5;
+  --color-lavender-tint: #EEEBF1;
+
+  --color-amber:         #C8943A;  /* works / maybe */
+  --color-amber-soft:    #EFDBAF;
+  --color-amber-tint:    #F9EFD6;
+
+  --color-blush:         #B8766F;  /* pass / unavailable */
+  --color-blush-soft:    #E8CDC8;
+  --color-blush-tint:    #F2E0DC;
+
+  --color-sage:         #8AA382;  /* soft nature accent */
+  --color-sage-soft:    #D4DFCE;
+  --color-sage-tint:    #E8EEE3;
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Shadow — very soft, warm */
+  --shadow-soft: 0 1px 2px rgba(42, 41, 35, 0.04), 0 4px 14px rgba(42, 41, 35, 0.05);
+  --shadow-raised: 0 2px 6px rgba(42, 41, 35, 0.06), 0 10px 30px rgba(42, 41, 35, 0.08);
 }
 
+/* Expose tokens to Tailwind so `bg-sand`, `text-ink-soft`, `bg-olive`, etc. work. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-sand:             var(--color-sand);
+  --color-cream:            var(--color-cream);
+  --color-stone:            var(--color-stone);
+  --color-sand-alt:         var(--color-sand-alt);
+
+  --color-ink:              var(--color-ink);
+  --color-ink-soft:         var(--color-ink-soft);
+  --color-ink-mute:         var(--color-ink-mute);
+  --color-ink-faint:        var(--color-ink-faint);
+
+  --color-olive:            var(--color-olive);
+  --color-olive-soft:       var(--color-olive-soft);
+  --color-olive-tint:       var(--color-olive-tint);
+
+  --color-terracotta:       var(--color-terracotta);
+  --color-terracotta-soft:  var(--color-terracotta-soft);
+  --color-terracotta-tint:  var(--color-terracotta-tint);
+
+  --color-teal:             var(--color-teal);
+  --color-teal-soft:        var(--color-teal-soft);
+  --color-teal-tint:        var(--color-teal-tint);
+
+  --color-lavender:         var(--color-lavender);
+  --color-lavender-soft:    var(--color-lavender-soft);
+  --color-lavender-tint:    var(--color-lavender-tint);
+
+  --color-amber:            var(--color-amber);
+  --color-amber-soft:       var(--color-amber-soft);
+  --color-amber-tint:       var(--color-amber-tint);
+
+  --color-blush:            var(--color-blush);
+  --color-blush-soft:       var(--color-blush-soft);
+  --color-blush-tint:       var(--color-blush-tint);
+
+  --color-sage:             var(--color-sage);
+  --color-sage-soft:        var(--color-sage-soft);
+  --color-sage-tint:        var(--color-sage-tint);
+
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-serif), Georgia, "Times New Roman", serif;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-raised: var(--shadow-raised);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base page */
+html, body { height: 100%; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-sand);
+  color: var(--color-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+/* Disable text selection inside interactive regions that drag */
+.no-select { user-select: none; -webkit-user-select: none; }
+
+/* Thin scrollbar for horizontal strips */
+.scrollbar-hidden::-webkit-scrollbar { display: none; }
+.scrollbar-hidden { scrollbar-width: none; -ms-overflow-style: none; }

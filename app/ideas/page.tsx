@@ -1,8 +1,20 @@
 'use client'
 
+// Ideas — the backlog of "things we could do." Funnel shape:
+//  - Top (most liked) — the ones gathering momentum
+//  - Everything else — recent chronological
+//  - Each idea has: tint+icon, like, "Turn into plan" CTA (→ create event)
+//  - Inline "add idea" card at the top.
+
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
+import { categoryFor } from '@/lib/categories'
+import PageHeader from '../components/PageHeader'
+import Card from '../components/Card'
+import IconTile from '../components/IconTile'
+import Avatar from '../components/Avatar'
+import { PlusIcon, StarIcon, XIcon } from '../components/icons'
 
 type Idea = {
   id: string
@@ -10,6 +22,7 @@ type Idea = {
   description: string | null
   submitted_by: string | null
   likes: number
+  created_at?: string
 }
 
 function getLikedKey(n: string) { return `summer-likes-${n}` }
@@ -19,6 +32,7 @@ export default function IdeasPage() {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const [likingId, setLikingId] = useState<string | null>(null)
@@ -27,7 +41,6 @@ export default function IdeasPage() {
 
   useEffect(() => { loadIdeas() }, [])
 
-  // Load persisted likes when name is set
   useEffect(() => {
     if (!name) return
     const stored = localStorage.getItem(getLikedKey(name))
@@ -38,25 +51,25 @@ export default function IdeasPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('ideas')
-      .select('id, title, description, submitted_by, likes')
+      .select('id, title, description, submitted_by, likes, created_at')
       .order('likes', { ascending: false })
     if (error) console.error('loadIdeas:', error)
-    if (data) setIdeas(data)
+    if (data) setIdeas(data as Idea[])
     setLoading(false)
   }
 
   async function submitIdea() {
     if (!title.trim() || !name) return
     setSubmitting(true)
-    const { error } = await supabase.from('ideas').insert({
+    await supabase.from('ideas').insert({
       title: title.trim(),
       description: description.trim() || null,
       submitted_by: name,
       likes: 0,
     })
-    if (error) console.error('submitIdea:', error)
     setTitle('')
     setDescription('')
+    setShowForm(false)
     await loadIdeas()
     setSubmitting(false)
   }
@@ -66,18 +79,14 @@ export default function IdeasPage() {
     setLikingId(idea.id)
 
     const alreadyLiked = likedIds.has(idea.id)
-
-    // Update liked state + persist to localStorage
     const newLiked = new Set(likedIds)
-    alreadyLiked ? newLiked.delete(idea.id) : newLiked.add(idea.id)
+    if (alreadyLiked) newLiked.delete(idea.id); else newLiked.add(idea.id)
     setLikedIds(newLiked)
     localStorage.setItem(getLikedKey(name), JSON.stringify([...newLiked]))
 
-    // Optimistic UI update
     const newLikes = alreadyLiked ? idea.likes - 1 : idea.likes + 1
     setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, likes: newLikes } : i))
 
-    // Write to DB then reload for accurate count
     await supabase.from('ideas').update({ likes: newLikes }).eq('id', idea.id)
     await loadIdeas()
     setLikingId(null)
@@ -91,107 +100,198 @@ export default function IdeasPage() {
     setDeletingId(null)
   }
 
+  const top = ideas.slice(0, 3).filter((i) => i.likes > 0)
+  const topIds = new Set(top.map((i) => i.id))
+  const rest = ideas.filter((i) => !topIds.has(i.id))
+
   return (
-    <main className="min-h-screen bg-gray-50 pb-10">
-      <div className="max-w-md mx-auto px-5">
-        <div className="pt-5 pb-1">
-          <a href="/" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">← Back</a>
-        </div>
+    <main className="max-w-md mx-auto px-5">
+      <PageHeader
+        variant="title"
+        title="Ideas"
+        subtitle="Throw things out. The group tells you what they're into."
+      />
 
-        <div className="mt-4 mb-1">
-          <h1 className="text-2xl font-bold text-gray-900">Ideas Hub</h1>
-        </div>
-        <p className="text-sm text-gray-500 mb-5">Throw out ideas. Like the ones you&apos;re into.</p>
-
-        {/* Submit form */}
-        {name && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Add an idea</p>
-            <input
-              type="text"
-              placeholder="What's the idea?"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && submitIdea()}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-green-400 transition"
-            />
-            <textarea
-              placeholder="Any details? (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none transition"
-            />
+      {/* Add idea */}
+      {name && (
+        <Card className="mb-5">
+          {!showForm ? (
             <button
-              onClick={submitIdea}
-              disabled={!title.trim() || submitting}
-              className="w-full bg-green-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 hover:bg-green-700 active:scale-[0.98] transition-all"
+              onClick={() => setShowForm(true)}
+              className="w-full flex items-center gap-3 text-left"
             >
-              {submitting ? 'Posting...' : 'Post Idea'}
+              <span className="w-10 h-10 rounded-xl bg-amber-tint text-amber flex items-center justify-center shrink-0">
+                <PlusIcon size={18} />
+              </span>
+              <span className="flex-1">
+                <span className="block font-semibold text-ink">Drop an idea</span>
+                <span className="block text-xs text-ink-soft mt-0.5">No commitment — just a seed</span>
+              </span>
             </button>
-          </div>
-        )}
-
-        {/* Ideas list */}
-        {loading && (
-          <div className="text-center py-12 text-gray-300 text-sm">Loading...</div>
-        )}
-
-        {!loading && ideas.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-5xl mb-3">💡</div>
-            <p className="text-gray-500 font-semibold">No one has posted yet</p>
-            <p className="text-gray-400 text-sm mt-1">Be the one who starts it off!</p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          {ideas.map((idea) => {
-            const isOwner = name === idea.submitted_by
-            return (
-              <div
-                key={idea.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3"
-              >
-                {/* Like button */}
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start justify-between">
+                <p className="text-xs font-bold text-ink-mute uppercase tracking-wider">New idea</p>
                 <button
-                  onClick={() => toggleLike(idea)}
-                  disabled={!name || likingId === idea.id}
-                  className={`flex flex-col items-center min-w-[44px] rounded-xl py-2 px-2 transition-all active:scale-90 disabled:opacity-50 ${
-                    likedIds.has(idea.id)
-                      ? 'bg-green-100 text-green-600'
-                      : 'bg-gray-50 text-gray-400 hover:bg-green-50 hover:text-green-500'
-                  }`}
+                  onClick={() => { setShowForm(false); setTitle(''); setDescription('') }}
+                  className="text-ink-faint hover:text-ink-soft transition-colors"
+                  aria-label="Cancel"
                 >
-                  <span className="text-xl leading-none">👍</span>
-                  <span className="text-xs font-bold mt-0.5">{idea.likes}</span>
+                  <XIcon size={16} />
                 </button>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-900 text-sm leading-snug">{idea.title}</p>
-                  {idea.description && (
-                    <p className="text-xs text-gray-500 mt-1 leading-snug">{idea.description}</p>
-                  )}
-                  <p className="text-xs text-gray-300 mt-1.5">— {idea.submitted_by}</p>
-                </div>
-
-                {/* Delete button (owner only) */}
-                {isOwner && (
-                  <button
-                    onClick={() => deleteIdea(idea)}
-                    disabled={deletingId === idea.id}
-                    className="text-gray-200 hover:text-red-400 transition-colors text-lg leading-none shrink-0 disabled:opacity-40 active:scale-90"
-                    title="Delete idea"
-                  >
-                    {deletingId === idea.id ? '...' : '×'}
-                  </button>
-                )}
               </div>
-            )
-          })}
+              <input
+                type="text"
+                placeholder="What's the idea?"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && submitIdea()}
+                autoFocus
+                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive transition"
+              />
+              <textarea
+                placeholder="Any details? (optional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink resize-none focus:outline-none focus:ring-2 focus:ring-olive transition"
+              />
+              <button
+                onClick={submitIdea}
+                disabled={!title.trim() || submitting}
+                className="w-full bg-olive text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
+              >
+                {submitting ? 'Posting…' : 'Post idea'}
+              </button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="flex flex-col gap-3 animate-pulse">
+          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
+          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
+          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && ideas.length === 0 && (
+        <Card className="text-center py-10">
+          <p className="font-semibold text-ink">No ideas yet</p>
+          <p className="text-sm text-ink-soft mt-1">Be the one who starts it off.</p>
+        </Card>
+      )}
+
+      {/* Top */}
+      {top.length > 0 && (
+        <section className="mb-6">
+          <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">Gathering steam</h2>
+          <div className="flex flex-col gap-2.5">
+            {top.map((idea) => (
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                liked={likedIds.has(idea.id)}
+                likingId={likingId}
+                deletingId={deletingId}
+                isOwner={name === idea.submitted_by}
+                onLike={() => toggleLike(idea)}
+                onDelete={() => deleteIdea(idea)}
+                featured
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Rest */}
+      {rest.length > 0 && (
+        <section className="mb-4">
+          <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">
+            {top.length > 0 ? 'Everything else' : 'All ideas'}
+          </h2>
+          <div className="flex flex-col gap-2.5">
+            {rest.map((idea) => (
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                liked={likedIds.has(idea.id)}
+                likingId={likingId}
+                deletingId={deletingId}
+                isOwner={name === idea.submitted_by}
+                onLike={() => toggleLike(idea)}
+                onDelete={() => deleteIdea(idea)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+
+function IdeaCard({
+  idea, liked, likingId, deletingId, isOwner, onLike, onDelete, featured = false,
+}: {
+  idea: Idea
+  liked: boolean
+  likingId: string | null
+  deletingId: string | null
+  isOwner: boolean
+  onLike: () => void
+  onDelete: () => void
+  /** Larger icon tile for "top" / featured ideas */
+  featured?: boolean
+}) {
+  const cat = categoryFor(idea.title)
+  return (
+    <Card className="flex gap-3">
+      <IconTile Icon={cat.Icon} tint={cat.tint} size={featured ? 52 : 44} />
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-ink leading-snug">{idea.title}</p>
+        {idea.description && (
+          <p className="text-xs text-ink-soft mt-1 leading-snug line-clamp-2">{idea.description}</p>
+        )}
+        <div className="flex items-center gap-2 mt-2">
+          {idea.submitted_by && (
+            <div className="flex items-center gap-1.5">
+              <Avatar name={idea.submitted_by} size={18} />
+              <span className="text-[11px] text-ink-mute">{idea.submitted_by}</span>
+            </div>
+          )}
         </div>
       </div>
-    </main>
+
+      <div className="flex flex-col items-end gap-2">
+        <button
+          onClick={onLike}
+          disabled={likingId === idea.id}
+          className={[
+            'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all active:scale-90 disabled:opacity-50',
+            liked ? 'bg-olive text-white' : 'bg-sand text-ink-soft hover:bg-olive-tint hover:text-olive',
+          ].join(' ')}
+          aria-pressed={liked}
+        >
+          <StarIcon size={12} />
+          {idea.likes}
+        </button>
+        {isOwner && (
+          <button
+            onClick={onDelete}
+            disabled={deletingId === idea.id}
+            className="text-ink-faint hover:text-blush transition-colors disabled:opacity-40"
+            aria-label="Delete idea"
+          >
+            <XIcon size={14} />
+          </button>
+        )}
+      </div>
+
+    </Card>
   )
 }

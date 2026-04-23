@@ -1,10 +1,20 @@
 'use client'
 
+// Events list — a simple directory of every event. The real action lives inside
+// each event detail; this page is the index. Use the floating "+" FAB to create.
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
 import { ensureUser } from '@/lib/ensureUser'
+import { categoryFor } from '@/lib/categories'
+import { inferEventStatus } from '@/lib/status'
+import PageHeader from '../components/PageHeader'
+import Card from '../components/Card'
+import StatusChip from '../components/StatusChip'
+import IconTile from '../components/IconTile'
+import { ChevronRightIcon, PlusIcon, XIcon } from '../components/icons'
 
 type Event = {
   id: string
@@ -13,10 +23,9 @@ type Event = {
   status: string
   created_by: string | null
   created_at: string
-  dateCount?: number
-  voteCount?: number
-  // dates where the current user is blocked
-  myConflictDates?: string[]
+  dateCount: number
+  voteCount: number
+  myConflictCount: number
 }
 
 export default function EventsPage() {
@@ -28,20 +37,17 @@ export default function EventsPage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Load events on mount, and reload when name changes (to refresh conflict warnings)
-  useEffect(() => { loadEvents() }, [name])
+  useEffect(() => { loadEvents() }, [name]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadEvents() {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('events')
       .select('id, title, description, status, created_by, created_at')
       .order('created_at', { ascending: false })
-    if (error) console.error('loadEvents:', error)
 
     if (!data) { setLoading(false); return }
 
-    // Batch: fetch all date options and all votes
     const [{ data: dateOptions }, { data: votes }] = await Promise.all([
       supabase.from('date_options').select('id, event_id, date'),
       supabase.from('votes').select('id, date_option_id'),
@@ -49,16 +55,13 @@ export default function EventsPage() {
 
     const optionsByEvent: Record<string, { id: string; date: string }[]> = {}
     for (const opt of dateOptions ?? []) {
-      if (!optionsByEvent[opt.event_id]) optionsByEvent[opt.event_id] = []
-      optionsByEvent[opt.event_id].push({ id: opt.id, date: opt.date })
+      ;(optionsByEvent[opt.event_id] ??= []).push({ id: opt.id, date: opt.date })
     }
-
     const votesByOption: Record<string, number> = {}
     for (const v of votes ?? []) {
       votesByOption[v.date_option_id] = (votesByOption[v.date_option_id] ?? 0) + 1
     }
 
-    // If a user is selected, fetch their blackout dates to detect conflicts
     let myBlackouts: Set<string> = new Set()
     if (name) {
       const userId = await ensureUser(name)
@@ -71,12 +74,9 @@ export default function EventsPage() {
 
     const enriched: Event[] = data.map((ev) => {
       const opts = optionsByEvent[ev.id] ?? []
-      const totalVotes = opts.reduce((sum, opt) => sum + (votesByOption[opt.id] ?? 0), 0)
-      // Which proposed dates conflict with my own blackouts?
-      const myConflictDates = name
-        ? opts.filter((opt) => myBlackouts.has(opt.date)).map((opt) => opt.date)
-        : []
-      return { ...ev, dateCount: opts.length, voteCount: totalVotes, myConflictDates }
+      const totalVotes = opts.reduce((sum, o) => sum + (votesByOption[o.id] ?? 0), 0)
+      const myConflictCount = name ? opts.filter((o) => myBlackouts.has(o.date)).length : 0
+      return { ...ev, dateCount: opts.length, voteCount: totalVotes, myConflictCount }
     })
 
     setEvents(enriched)
@@ -86,10 +86,9 @@ export default function EventsPage() {
   async function createEvent() {
     if (!title.trim() || !name) return
     setSubmitting(true)
-    const { error } = await supabase
+    await supabase
       .from('events')
       .insert({ title: title.trim(), description: description.trim() || null, created_by: name })
-    if (error) { console.error('createEvent:', error); setSubmitting(false); return }
     setTitle('')
     setDescription('')
     setShowForm(false)
@@ -97,131 +96,120 @@ export default function EventsPage() {
     await loadEvents()
   }
 
-  const statusConfig: Record<string, { label: string; classes: string }> = {
-    planning: { label: 'Planning', classes: 'bg-amber-100 text-amber-700' },
-    confirmed: { label: 'Confirmed', classes: 'bg-green-100 text-green-700' },
-    cancelled: { label: 'Cancelled', classes: 'bg-red-100 text-red-500' },
-  }
-
   return (
-    <main className="min-h-screen bg-gray-50 pb-10">
-      <div className="max-w-md mx-auto px-5">
-        <div className="pt-5 pb-1">
-          <a href="/" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">← Back</a>
-        </div>
+    <main className="max-w-md mx-auto px-5">
+      <PageHeader
+        variant="title"
+        title="Events"
+        subtitle="Every plan the group is cooking up."
+      />
 
-        <div className="flex items-center justify-between mt-4 mb-1">
-          <h1 className="text-2xl font-bold text-gray-900">Event Voting</h1>
-          {name && (
+      {name && (
+        <Card className="mb-5">
+          {!showForm ? (
             <button
-              onClick={() => setShowForm(!showForm)}
-              className="bg-purple-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-purple-700 active:scale-95 transition-all shadow-sm"
+              onClick={() => setShowForm(true)}
+              className="w-full flex items-center gap-3 text-left"
             >
-              + New
+              <span className="w-10 h-10 rounded-xl bg-terracotta-tint text-terracotta flex items-center justify-center shrink-0">
+                <PlusIcon size={18} />
+              </span>
+              <span className="flex-1">
+                <span className="block font-semibold text-ink">Start a new event</span>
+                <span className="block text-xs text-ink-soft mt-0.5">Propose dates, let the group vote</span>
+              </span>
             </button>
-          )}
-        </div>
-        <p className="text-sm text-gray-500 mb-5">Vote on dates for upcoming events.</p>
-
-        {/* Create form */}
-        {showForm && name && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">New Event</p>
-            <input
-              type="text"
-              placeholder="Event name"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-purple-400 transition"
-            />
-            <textarea
-              placeholder="Details (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none transition"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowForm(false)}
-                className="flex-1 border border-gray-200 text-gray-500 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start justify-between">
+                <p className="text-xs font-bold text-ink-mute uppercase tracking-wider">New event</p>
+                <button
+                  onClick={() => { setShowForm(false); setTitle(''); setDescription('') }}
+                  className="text-ink-faint hover:text-ink-soft transition-colors"
+                  aria-label="Cancel"
+                >
+                  <XIcon size={16} />
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Event name (e.g. Lake weekend)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                autoFocus
+                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive transition"
+              />
+              <textarea
+                placeholder="Details (optional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink resize-none focus:outline-none focus:ring-2 focus:ring-olive transition"
+              />
               <button
                 onClick={createEvent}
                 disabled={!title.trim() || submitting}
-                className="flex-1 bg-purple-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 active:scale-95 transition-all"
+                className="w-full bg-olive text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
               >
-                {submitting ? 'Creating...' : 'Create'}
+                {submitting ? 'Creating…' : 'Create event'}
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </Card>
+      )}
 
-        {/* Events list */}
-        {loading && (
-          <div className="text-center py-12 text-gray-300 text-sm">Loading...</div>
-        )}
-
-        {!loading && events.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-3">🗳️</div>
-            <p className="text-gray-500 font-medium">No events yet</p>
-            <p className="text-gray-400 text-sm mt-1">Create one to start planning!</p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          {events.map((event) => {
-            const cfg = statusConfig[event.status] ?? { label: event.status, classes: 'bg-gray-100 text-gray-500' }
-            const hasConflict = name && (event.myConflictDates?.length ?? 0) > 0
-            return (
-              <Link
-                key={event.id}
-                href={`/events/${event.id}`}
-                className={`block bg-white rounded-2xl border shadow-sm p-4 hover:shadow-md transition-all active:scale-[0.98] ${
-                  hasConflict
-                    ? 'border-amber-200 hover:border-amber-300'
-                    : 'border-gray-100 hover:border-purple-200'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-gray-900 truncate">{event.title}</p>
-                    {event.description && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{event.description}</p>
-                    )}
-                    <div className="flex items-center gap-3 mt-2 flex-wrap">
-                      {(event.dateCount ?? 0) > 0 ? (
-                        <>
-                          <span className="text-xs text-gray-400">
-                            {event.dateCount} date{event.dateCount !== 1 ? 's' : ''}
-                          </span>
-                          <span className="text-gray-200">·</span>
-                          <span className="text-xs text-gray-400">
-                            {event.voteCount} vote{event.voteCount !== 1 ? 's' : ''}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-300">No dates proposed yet</span>
-                      )}
-                    </div>
-                    {/* Conflict warning for current user */}
-                    {hasConflict && (
-                      <p className="text-xs font-semibold text-amber-600 mt-2">
-                        ⚠️ You&apos;re blocked on some proposed dates
-                      </p>
-                    )}
-                  </div>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize shrink-0 ${cfg.classes}`}>
-                    {cfg.label}
-                  </span>
-                </div>
-              </Link>
-            )
-          })}
+      {/* Loading */}
+      {loading && (
+        <div className="flex flex-col gap-3 animate-pulse">
+          <div className="h-20 bg-cream rounded-[var(--radius-lg)]" />
+          <div className="h-20 bg-cream rounded-[var(--radius-lg)]" />
+          <div className="h-20 bg-cream rounded-[var(--radius-lg)]" />
         </div>
+      )}
+
+      {/* Empty */}
+      {!loading && events.length === 0 && (
+        <Card className="text-center py-10">
+          <p className="font-semibold text-ink">No events yet</p>
+          <p className="text-sm text-ink-soft mt-1">Propose one to get planning started.</p>
+        </Card>
+      )}
+
+      {/* Events list */}
+      <div className="flex flex-col gap-2.5">
+        {events.map((ev) => {
+          const cat = categoryFor(ev.title)
+          const status = inferEventStatus({
+            status: ev.status,
+            hasDateOptions: ev.dateCount > 0,
+            voteCount: ev.voteCount,
+            createdByCurrentUser: !!name && ev.created_by === name,
+          })
+          return (
+            <Link key={ev.id} href={`/events/${ev.id}`}>
+              <Card className="flex items-center gap-3">
+                <IconTile Icon={cat.Icon} tint={cat.tint} size={48} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <StatusChip status={status} size="xs" />
+                  </div>
+                  <p className="font-semibold text-ink truncate">{ev.title}</p>
+                  <p className="text-xs text-ink-soft mt-0.5 truncate">
+                    {ev.dateCount > 0
+                      ? `${ev.dateCount} option${ev.dateCount !== 1 ? 's' : ''} · ${ev.voteCount} vote${ev.voteCount !== 1 ? 's' : ''}`
+                      : 'No dates proposed yet'}
+                  </p>
+                  {ev.myConflictCount > 0 && (
+                    <p className="text-xs font-semibold text-amber mt-1">
+                      You&apos;re blocked on {ev.myConflictCount} of these
+                    </p>
+                  )}
+                </div>
+                <ChevronRightIcon size={18} className="text-ink-faint" />
+              </Card>
+            </Link>
+          )
+        })}
       </div>
     </main>
   )
