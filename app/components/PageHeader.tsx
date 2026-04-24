@@ -9,7 +9,8 @@ import Link from 'next/link'
 import { useMemo } from 'react'
 import { useName } from '@/lib/useName'
 import Avatar from './Avatar'
-import { SunIcon, BellIcon } from './icons'
+import NotificationsBell from './NotificationsBell'
+import { SunIcon } from './icons'
 
 function greetingFor(d: Date) {
   const h = d.getHours()
@@ -63,9 +64,7 @@ export default function PageHeader({
           )}
         </div>
         <div className="flex items-center gap-3 pt-1">
-          <button className="text-ink hover:text-olive transition-colors" aria-label="Notifications">
-            <BellIcon size={22} />
-          </button>
+          <NotificationsBell />
           <Link href="/me" aria-label="Profile">
             {name ? (
               <Avatar name={name} size={40} />
