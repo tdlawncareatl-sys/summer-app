@@ -8,6 +8,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useAuth } from '@/lib/auth'
 import { useName } from '@/lib/useName'
 import { loadPlanData, PlanData } from '@/lib/planData'
 import { categoryFor } from '@/lib/categories'
@@ -19,10 +20,13 @@ import StatusChip from '../components/StatusChip'
 import { ChevronRightIcon, CalendarIcon, LightbulbIcon } from '../components/icons'
 
 export default function MePage() {
+  const { authUser, signOut } = useAuth()
   const [name, setName] = useName()
   const [data, setData] = useState<PlanData | null>(null)
   const [editingName, setEditingName] = useState(!name)
   const [draft, setDraft] = useState(name)
+  const [savingName, setSavingName] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   useEffect(() => { setDraft(name) }, [name])
 
@@ -36,11 +40,26 @@ export default function MePage() {
   const myEvents  = data?.events.filter((e) => e.created_by === name) ?? []
   const myIdeas   = data?.ideas.filter((i) => i.submitted_by === name) ?? []
 
-  function saveName() {
+  async function saveName() {
     const trimmed = draft.trim()
     if (!trimmed) return
-    setName(trimmed)
-    setEditingName(false)
+    setSavingName(true)
+    try {
+      await setName(trimmed)
+      setEditingName(false)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  async function handleSignOut() {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      setSigningOut(false)
+    }
   }
 
   return (
@@ -61,7 +80,7 @@ export default function MePage() {
                 type="text"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveName()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void saveName() }}
                 placeholder="Your name"
                 autoFocus
                 className="w-full bg-sand border-0 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive transition"
@@ -69,10 +88,10 @@ export default function MePage() {
               <div className="flex gap-2">
                 <button
                   onClick={saveName}
-                  disabled={!draft.trim()}
+                  disabled={!draft.trim() || savingName}
                   className="flex-1 bg-olive text-white rounded-xl py-2 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
                 >
-                  Save
+                  {savingName ? 'Saving…' : 'Save'}
                 </button>
                 {name && (
                   <button
@@ -88,6 +107,9 @@ export default function MePage() {
             <>
               <h2 className="font-serif text-2xl font-black text-ink tracking-tight truncate">{name}</h2>
               <p className="text-sm text-ink-soft">Member of the crew</p>
+              {authUser?.email && (
+                <p className="text-xs text-ink-mute mt-1">{authUser.email}</p>
+              )}
               <button
                 onClick={() => setEditingName(true)}
                 className="mt-1 text-xs font-semibold text-olive"
@@ -183,6 +205,13 @@ export default function MePage() {
           <Divider />
           <NavRow Icon={LightbulbIcon} tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
         </Card>
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="mt-3 w-full rounded-[var(--radius-lg)] bg-stone px-4 py-3 text-sm font-semibold text-ink-soft transition-colors hover:text-ink disabled:opacity-40"
+        >
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
       </section>
 
       {!data && name && (

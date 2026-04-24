@@ -7,6 +7,7 @@
 //  - Inline "add idea" card at the top.
 
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
@@ -25,9 +26,10 @@ type Idea = {
   created_at?: string
 }
 
-function getLikedKey(n: string) { return `summer-likes-${n}` }
+function getLikedKey(key: string) { return `summer-likes-${key}` }
 
 export default function IdeasPage() {
+  const { authUser } = useAuth()
   const [name] = useName()
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [title, setTitle] = useState('')
@@ -42,10 +44,11 @@ export default function IdeasPage() {
   useEffect(() => { loadIdeas() }, [])
 
   useEffect(() => {
-    if (!name) return
-    const stored = localStorage.getItem(getLikedKey(name))
+    const likeKey = authUser?.email ?? name
+    if (!likeKey) return
+    const stored = localStorage.getItem(getLikedKey(likeKey))
     setLikedIds(stored ? new Set(JSON.parse(stored)) : new Set())
-  }, [name])
+  }, [authUser?.email, name])
 
   async function loadIdeas() {
     setLoading(true)
@@ -82,7 +85,7 @@ export default function IdeasPage() {
     const newLiked = new Set(likedIds)
     if (alreadyLiked) newLiked.delete(idea.id); else newLiked.add(idea.id)
     setLikedIds(newLiked)
-    localStorage.setItem(getLikedKey(name), JSON.stringify([...newLiked]))
+    localStorage.setItem(getLikedKey(authUser?.email ?? name), JSON.stringify([...newLiked]))
 
     const newLikes = alreadyLiked ? idea.likes - 1 : idea.likes + 1
     setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, likes: newLikes } : i))

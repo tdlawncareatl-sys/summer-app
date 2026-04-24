@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 import { Geist, Instrument_Serif } from "next/font/google"
 import "./globals.css"
-import BottomNav from "./components/BottomNav"
+import AppShell from "./components/AppShell"
+import { AuthProvider } from "@/lib/auth"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,9 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${instrumentSerif.variable} h-full`}>
       <body className="min-h-full bg-sand text-ink antialiased">
-        {/* Leave room for the floating bottom nav. */}
-        <div className="min-h-screen pb-28">{children}</div>
-        <BottomNav />
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   )
