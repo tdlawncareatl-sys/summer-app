@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Summer Plans is a mobile-first planning app for a friend group to coordinate summer dates, vote on event options, track blackouts, and keep ideas moving.
 
 ## Getting Started
 
@@ -6,19 +6,33 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run test
+npm run test:watch
+npm run test:e2e
+```
+
+What each one does:
+
+- `npm run test` runs the fast Vitest suite for logic and component behavior.
+- `npm run test:watch` keeps Vitest open while you work.
+- `npm run test:e2e` runs the Playwright smoke tests against a production-style local server (`build + start`).
+
+## Current Test Coverage
+
+The test suite is intentionally starting with the highest-value checks:
+
+- notification generation logic
+- auth shell rendering and submit behavior
+- signed-out browser smoke test
+
+The next layers to add are the full event-voting flow, availability editing, and cross-page regression checks before broader friend-group rollout.
 
 ## Learn More
 
