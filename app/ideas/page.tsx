@@ -1,21 +1,18 @@
 'use client'
 
-// Ideas — the backlog of "things we could do." Funnel shape:
-//  - Top (most liked) — the ones gathering momentum
-//  - Everything else — recent chronological
-//  - Each idea has: tint+icon, like, "Turn into plan" CTA (→ create event)
-//  - Inline "add idea" card at the top.
-
-import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
-import { categoryFor } from '@/lib/categories'
+import { categoryFor, type CategoryTint } from '@/lib/categories'
+import { formatDateRangeShort, todayISO } from '@/lib/planData'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import IconTile from '../components/IconTile'
-import Avatar from '../components/Avatar'
-import { PlusIcon, StarIcon, XIcon } from '../components/icons'
+import StatusChip from '../components/StatusChip'
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, LightbulbIcon, PlusIcon, StarIcon, UsersIcon, XIcon } from '../components/icons'
 
 type Idea = {
   id: string
@@ -26,43 +23,121 @@ type Idea = {
   created_at?: string
 }
 
-function getLikedKey(key: string) { return `summer-likes-${key}` }
+type EventLite = {
+  id: string
+  title: string
+  description: string | null
+  status: string
+  created_at: string
+  confirmed_date?: string | null
+  confirmed_end_date?: string | null
+  participantCount: number
+}
+
+type SortMode = 'recent' | 'momentum'
+type IdeaChoice = 'best' | 'works' | 'pass'
+
+function likedKeyFor(key: string) {
+  return `summer-likes-${key}`
+}
+
+function choicesKeyFor(key: string) {
+  return `summer-idea-choices-${key}`
+}
 
 export default function IdeasPage() {
+  const router = useRouter()
   const { authUser } = useAuth()
   const [name] = useName()
   const [ideas, setIdeas] = useState<Idea[]>([])
+  const [events, setEvents] = useState<EventLite[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const [likingId, setLikingId] = useState<string | null>(null)
+  const [planningId, setPlanningId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sortMode, setSortMode] = useState<SortMode>('recent')
+  const [showAllActive, setShowAllActive] = useState(false)
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const [choices, setChoices] = useState<Record<string, IdeaChoice>>({})
 
-  useEffect(() => { loadIdeas() }, [])
+  const formRef = useRef<HTMLDivElement | null>(null)
+  const activeRef = useRef<HTMLElement | null>(null)
+  const backlogRef = useRef<HTMLElement | null>(null)
+  const plansRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    const likeKey = authUser?.email ?? name
-    if (!likeKey) return
-    const stored = localStorage.getItem(getLikedKey(likeKey))
-    setLikedIds(stored ? new Set(JSON.parse(stored)) : new Set())
+    void loadIdeasSurface()
+  }, [])
+
+  useEffect(() => {
+    const storageKey = authUser?.email ?? name
+    if (!storageKey) return
+
+    const liked = localStorage.getItem(likedKeyFor(storageKey))
+    const storedChoices = localStorage.getItem(choicesKeyFor(storageKey))
+    setLikedIds(liked ? new Set(JSON.parse(liked)) : new Set())
+    setChoices(storedChoices ? JSON.parse(storedChoices) : {})
   }, [authUser?.email, name])
 
-  async function loadIdeas() {
+  async function loadIdeasSurface() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('ideas')
-      .select('id, title, description, submitted_by, likes, created_at')
-      .order('likes', { ascending: false })
-    if (error) console.error('loadIdeas:', error)
-    if (data) setIdeas(data as Idea[])
+
+    const [
+      { data: ideaRows, error: ideasError },
+      { data: eventRows, error: eventsError },
+      { data: optionRows },
+      { data: voteRows },
+    ] = await Promise.all([
+      supabase
+        .from('ideas')
+        .select('id, title, description, submitted_by, likes, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('events')
+        .select('id, title, description, status, created_at, confirmed_date, confirmed_end_date')
+        .order('created_at', { ascending: false }),
+      supabase.from('date_options').select('id, event_id'),
+      supabase.from('votes').select('id, date_option_id'),
+    ])
+
+    if (ideasError) console.error('load ideas:', ideasError)
+    if (eventsError) console.error('load linked events:', eventsError)
+
+    const voteCountsByEvent: Record<string, number> = {}
+    const eventByOption: Record<string, string> = {}
+
+    for (const option of optionRows ?? []) {
+      eventByOption[option.id] = option.event_id
+    }
+    for (const vote of voteRows ?? []) {
+      const eventId = eventByOption[vote.date_option_id]
+      if (!eventId) continue
+      voteCountsByEvent[eventId] = (voteCountsByEvent[eventId] ?? 0) + 1
+    }
+
+    setIdeas((ideaRows ?? []) as Idea[])
+    setEvents(
+      ((eventRows ?? []) as Omit<EventLite, 'participantCount'>[]).map((event) => ({
+        ...event,
+        participantCount: voteCountsByEvent[event.id] ?? 0,
+      })),
+    )
     setLoading(false)
   }
 
+  function revealForm() {
+    setShowForm(true)
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
   async function submitIdea() {
-    if (!title.trim() || !name) return
+    if (!title.trim() || !name || submitting) return
     setSubmitting(true)
     await supabase.from('ideas').insert({
       title: title.trim(),
@@ -73,25 +148,44 @@ export default function IdeasPage() {
     setTitle('')
     setDescription('')
     setShowForm(false)
-    await loadIdeas()
+    setSortMode('recent')
+    await loadIdeasSurface()
     setSubmitting(false)
   }
 
-  async function toggleLike(idea: Idea) {
+  async function reactToIdea(idea: Idea, choice: IdeaChoice) {
     if (!name || likingId === idea.id) return
     setLikingId(idea.id)
 
-    const alreadyLiked = likedIds.has(idea.id)
-    const newLiked = new Set(likedIds)
-    if (alreadyLiked) newLiked.delete(idea.id); else newLiked.add(idea.id)
-    setLikedIds(newLiked)
-    localStorage.setItem(getLikedKey(authUser?.email ?? name), JSON.stringify([...newLiked]))
+    const likeStorageKey = authUser?.email ?? name
+    const nextChoices = { ...choices, [idea.id]: choice }
+    const nextLikedIds = new Set(likedIds)
+    const currentlyLiked = likedIds.has(idea.id)
+    const shouldLike = choice !== 'pass'
 
-    const newLikes = alreadyLiked ? idea.likes - 1 : idea.likes + 1
-    setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, likes: newLikes } : i))
+    let nextLikes = idea.likes
+    if (shouldLike && !currentlyLiked) {
+      nextLikedIds.add(idea.id)
+      nextLikes += 1
+    }
+    if (!shouldLike && currentlyLiked) {
+      nextLikedIds.delete(idea.id)
+      nextLikes = Math.max(0, nextLikes - 1)
+    }
 
-    await supabase.from('ideas').update({ likes: newLikes }).eq('id', idea.id)
-    await loadIdeas()
+    setChoices(nextChoices)
+    setLikedIds(nextLikedIds)
+    localStorage.setItem(choicesKeyFor(likeStorageKey), JSON.stringify(nextChoices))
+    localStorage.setItem(likedKeyFor(likeStorageKey), JSON.stringify([...nextLikedIds]))
+    setIdeas((current) => current.map((row) => (
+      row.id === idea.id ? { ...row, likes: nextLikes } : row
+    )))
+
+    if (nextLikes !== idea.likes) {
+      await supabase.from('ideas').update({ likes: nextLikes }).eq('id', idea.id)
+    }
+
+    await loadIdeasSurface()
     setLikingId(null)
   }
 
@@ -99,202 +193,594 @@ export default function IdeasPage() {
     if (deletingId) return
     setDeletingId(idea.id)
     await supabase.from('ideas').delete().eq('id', idea.id)
-    setIdeas((prev) => prev.filter((i) => i.id !== idea.id))
+    setIdeas((current) => current.filter((row) => row.id !== idea.id))
     setDeletingId(null)
   }
 
-  const top = ideas.slice(0, 3).filter((i) => i.likes > 0)
-  const topIds = new Set(top.map((i) => i.id))
-  const rest = ideas.filter((i) => !topIds.has(i.id))
+  async function planIdea(idea: Idea) {
+    if (!name || planningId) return
+    setPlanningId(idea.id)
+
+    const existing = findMatchingEvent(idea.title, events)
+    if (existing) {
+      router.push(`/events/${existing.id}`)
+      setPlanningId(null)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('events')
+      .insert({
+        title: idea.title.trim(),
+        description: idea.description?.trim() || null,
+        created_by: name,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      console.error('plan idea:', error)
+      setPlanningId(null)
+      return
+    }
+
+    await loadIdeasSurface()
+    setPlanningId(null)
+    router.push(`/events/${data.id}`)
+  }
+
+  const sortedUnplannedIdeas = [...ideas]
+    .filter((idea) => !findMatchingEvent(idea.title, events))
+    .sort((a, b) => {
+      if (sortMode === 'momentum') {
+        if (b.likes !== a.likes) return b.likes - a.likes
+      }
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+    })
+
+  const activeIdeas = showAllActive ? sortedUnplannedIdeas.slice(0, 6) : sortedUnplannedIdeas.slice(0, 3)
+  const backlogIdeas = sortedUnplannedIdeas.slice(showAllActive ? 6 : 3)
+  const turnedIntoPlans = [...events]
+    .filter((event) => ideas.some((idea) => titlesMatch(idea.title, event.title)))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
   return (
     <main className="max-w-md mx-auto px-5">
       <PageHeader
         variant="title"
         title="Ideas"
-        subtitle="Throw things out. The group tells you what they're into."
+        subtitle="Capture and plan what to do next."
+        action={name ? (
+          <div className="flex justify-end">
+            <button
+              onClick={revealForm}
+              className="inline-flex items-center gap-2 rounded-full bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
+            >
+              <PlusIcon size={16} />
+              Add Idea
+            </button>
+          </div>
+        ) : undefined}
       />
 
-      {/* Add idea */}
+      <ActionRail
+        onAddIdea={revealForm}
+        onVoteTogether={() => scrollToRef(activeRef)}
+        onPlanAndSchedule={() => scrollToRef(plansRef)}
+        onLearnMore={() => scrollToRef(backlogRef)}
+      />
+
       {name && (
-        <Card className="mb-5">
-          {!showForm ? (
-            <button
-              onClick={() => setShowForm(true)}
-              className="w-full flex items-center gap-3 text-left"
-            >
-              <span className="w-10 h-10 rounded-xl bg-amber-tint text-amber flex items-center justify-center shrink-0">
-                <PlusIcon size={18} />
-              </span>
-              <span className="flex-1">
-                <span className="block font-semibold text-ink">Drop an idea</span>
-                <span className="block text-xs text-ink-soft mt-0.5">No commitment — just a seed</span>
-              </span>
-            </button>
-          ) : (
-            <div className="flex flex-col gap-3">
+        <div ref={formRef} className="mt-4">
+          {showForm ? (
+            <Card className="border border-stone/70 p-4">
               <div className="flex items-start justify-between">
-                <p className="text-xs font-bold text-ink-mute uppercase tracking-wider">New idea</p>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">Add an idea</p>
+                  <p className="mt-1 text-sm text-ink-soft">Anything you want to do this summer.</p>
+                </div>
                 <button
-                  onClick={() => { setShowForm(false); setTitle(''); setDescription('') }}
-                  className="text-ink-faint hover:text-ink-soft transition-colors"
-                  aria-label="Cancel"
+                  onClick={() => {
+                    setShowForm(false)
+                    setTitle('')
+                    setDescription('')
+                  }}
+                  className="text-ink-faint transition-colors hover:text-ink-soft"
+                  aria-label="Close add idea form"
                 >
                   <XIcon size={16} />
                 </button>
               </div>
               <input
                 type="text"
-                placeholder="What's the idea?"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && submitIdea()}
+                onChange={(event) => setTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    void submitIdea()
+                  }
+                }}
+                placeholder="Pickleball Saturday"
                 autoFocus
-                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive transition"
+                className="mt-4 w-full rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
               <textarea
-                placeholder="Any details? (optional)"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-                className="w-full bg-sand border-0 rounded-xl px-3 py-2.5 text-sm text-ink resize-none focus:outline-none focus:ring-2 focus:ring-olive transition"
+                onChange={(event) => setDescription(event.target.value)}
+                rows={3}
+                placeholder="Any details to help the group picture it?"
+                className="mt-3 w-full resize-none rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
               <button
-                onClick={submitIdea}
+                onClick={() => void submitIdea()}
                 disabled={!title.trim() || submitting}
-                className="w-full bg-olive text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all"
+                className="mt-3 w-full rounded-2xl bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
               >
-                {submitting ? 'Posting…' : 'Post idea'}
+                {submitting ? 'Saving idea…' : 'Add idea'}
               </button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Loading skeleton */}
-      {loading && (
-        <div className="flex flex-col gap-3 animate-pulse">
-          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
-          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
-          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
+            </Card>
+          ) : null}
         </div>
       )}
 
-      {/* Empty */}
-      {!loading && ideas.length === 0 && (
-        <Card className="text-center py-10">
-          <p className="font-semibold text-ink">No ideas yet</p>
-          <p className="text-sm text-ink-soft mt-1">Be the one who starts it off.</p>
-        </Card>
-      )}
+      {loading ? (
+        <IdeasSkeleton />
+      ) : (
+        <>
+          <section ref={activeRef} className="mt-6">
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="font-sans text-[30px] font-bold tracking-tight text-ink">Active Ideas</h2>
+                <p className="mt-1 text-sm text-ink-soft">Vote on ideas to help decide what to plan next.</p>
+              </div>
+              <label className="flex items-center gap-1 text-sm font-medium text-ink-soft">
+                <span>Sort</span>
+                <div className="relative">
+                  <select
+                    value={sortMode}
+                    onChange={(event) => setSortMode(event.target.value as SortMode)}
+                    className="appearance-none bg-transparent pr-5 font-semibold text-ink focus:outline-none"
+                  >
+                    <option value="recent">Recent</option>
+                    <option value="momentum">Momentum</option>
+                  </select>
+                  <ChevronDownIcon size={14} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-ink-mute" />
+                </div>
+              </label>
+            </div>
 
-      {/* Top */}
-      {top.length > 0 && (
-        <section className="mb-6">
-          <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">Gathering steam</h2>
-          <div className="flex flex-col gap-2.5">
-            {top.map((idea) => (
-              <IdeaCard
-                key={idea.id}
-                idea={idea}
-                liked={likedIds.has(idea.id)}
-                likingId={likingId}
-                deletingId={deletingId}
-                isOwner={name === idea.submitted_by}
-                onLike={() => toggleLike(idea)}
-                onDelete={() => deleteIdea(idea)}
-                featured
-              />
-            ))}
-          </div>
-        </section>
-      )}
+            {activeIdeas.length === 0 ? (
+              <Card className="border border-stone/70 py-8 text-center">
+                <p className="font-semibold text-ink">No active ideas yet</p>
+                <p className="mt-1 text-sm text-ink-soft">Start one and give the group something to vote around.</p>
+              </Card>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {activeIdeas.map((idea) => (
+                  <IdeaRow
+                    key={idea.id}
+                    idea={idea}
+                    choice={choices[idea.id]}
+                    liking={likingId === idea.id}
+                    planning={planningId === idea.id}
+                    deleting={deletingId === idea.id}
+                    isOwner={name === idea.submitted_by}
+                    onChoose={(choice) => void reactToIdea(idea, choice)}
+                    onPlan={() => void planIdea(idea)}
+                    onDelete={() => void deleteIdea(idea)}
+                  />
+                ))}
+              </div>
+            )}
 
-      {/* Rest */}
-      {rest.length > 0 && (
-        <section className="mb-4">
-          <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">
-            {top.length > 0 ? 'Everything else' : 'All ideas'}
-          </h2>
-          <div className="flex flex-col gap-2.5">
-            {rest.map((idea) => (
-              <IdeaCard
-                key={idea.id}
-                idea={idea}
-                liked={likedIds.has(idea.id)}
-                likingId={likingId}
-                deletingId={deletingId}
-                isOwner={name === idea.submitted_by}
-                onLike={() => toggleLike(idea)}
-                onDelete={() => deleteIdea(idea)}
-              />
-            ))}
-          </div>
-        </section>
+            {sortedUnplannedIdeas.length > (showAllActive ? 6 : 3) && (
+              <button
+                onClick={() => setShowAllActive((current) => !current)}
+                className="mx-auto mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
+              >
+                {showAllActive ? 'Show fewer active ideas' : 'See all active ideas'}
+                <ChevronDownIcon size={14} className={showAllActive ? 'rotate-180' : ''} />
+              </button>
+            )}
+          </section>
+
+          {backlogIdeas.length > 0 && (
+            <section ref={backlogRef} className="mt-7">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">Saved Ideas (backlog)</h2>
+                  <p className="mt-1 text-sm text-ink-soft">Ideas to keep around for later.</p>
+                </div>
+                <LinkishButton label="See all" onClick={() => setShowAllActive(true)} />
+              </div>
+              <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
+                {backlogIdeas.map((idea) => (
+                  <BacklogCard key={idea.id} idea={idea} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {turnedIntoPlans.length > 0 && (
+            <section ref={plansRef} className="mt-7 mb-4">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">Recently Turned Into Plans</h2>
+                  <p className="mt-1 text-sm text-ink-soft">Ideas that already made it onto the calendar.</p>
+                </div>
+                <LinkishButton label="See all" href="/events" />
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {turnedIntoPlans.slice(0, 3).map((event) => (
+                  <TurnedPlanCard key={event.id} event={event} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </main>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-
-function IdeaCard({
-  idea, liked, likingId, deletingId, isOwner, onLike, onDelete, featured = false,
-}: {
-  idea: Idea
-  liked: boolean
-  likingId: string | null
-  deletingId: string | null
-  isOwner: boolean
-  onLike: () => void
-  onDelete: () => void
-  /** Larger icon tile for "top" / featured ideas */
-  featured?: boolean
-}) {
-  const cat = categoryFor(idea.title)
+function IdeasSkeleton() {
   return (
-    <Card className="flex gap-3">
-      <IconTile Icon={cat.Icon} tint={cat.tint} size={featured ? 52 : 44} />
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-ink leading-snug">{idea.title}</p>
-        {idea.description && (
-          <p className="text-xs text-ink-soft mt-1 leading-snug line-clamp-2">{idea.description}</p>
-        )}
-        <div className="flex items-center gap-2 mt-2">
-          {idea.submitted_by && (
-            <div className="flex items-center gap-1.5">
-              <Avatar name={idea.submitted_by} size={18} />
-              <span className="text-[11px] text-ink-mute">{idea.submitted_by}</span>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="mt-4 animate-pulse">
+      <div className="h-24 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="mt-6 h-40 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="mt-3 h-40 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="mt-3 h-40 rounded-[var(--radius-lg)] bg-cream" />
+    </div>
+  )
+}
 
-      <div className="flex flex-col items-end gap-2">
-        <button
-          onClick={onLike}
-          disabled={likingId === idea.id}
-          className={[
-            'flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all active:scale-90 disabled:opacity-50',
-            liked ? 'bg-olive text-white' : 'bg-sand text-ink-soft hover:bg-olive-tint hover:text-olive',
-          ].join(' ')}
-          aria-pressed={liked}
-        >
-          <StarIcon size={12} />
-          {idea.likes}
-        </button>
-        {isOwner && (
-          <button
-            onClick={onDelete}
-            disabled={deletingId === idea.id}
-            className="text-ink-faint hover:text-blush transition-colors disabled:opacity-40"
-            aria-label="Delete idea"
-          >
-            <XIcon size={14} />
-          </button>
-        )}
+function ActionRail({
+  onAddIdea,
+  onVoteTogether,
+  onPlanAndSchedule,
+  onLearnMore,
+}: {
+  onAddIdea: () => void
+  onVoteTogether: () => void
+  onPlanAndSchedule: () => void
+  onLearnMore: () => void
+}) {
+  return (
+    <Card className="border border-stone/70 p-0 overflow-hidden">
+      <div className="grid grid-cols-4 divide-x divide-stone/60">
+        <ActionRailItem
+          tint="sage"
+          title="Add an idea"
+          description="Anything you want to do."
+          Icon={LightbulbIcon}
+          onClick={onAddIdea}
+        />
+        <ActionRailItem
+          tint="terracotta"
+          title="Vote together"
+          description="Help the best ideas rise."
+          Icon={UsersIcon}
+          onClick={onVoteTogether}
+        />
+        <ActionRailItem
+          tint="teal"
+          title="Plan & schedule"
+          description="Turn ideas into real plans."
+          Icon={PlusIcon}
+          onClick={onPlanAndSchedule}
+        />
+        <ActionRailItem
+          tint="olive"
+          title="Learn more"
+          description="See what is waiting in the wings."
+          Icon={ChevronRightIcon}
+          onClick={onLearnMore}
+        />
       </div>
-
     </Card>
   )
+}
+
+function ActionRailItem({
+  Icon,
+  tint,
+  title,
+  description,
+  onClick,
+}: {
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  tint: CategoryTint
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-start gap-2 px-3 py-3 text-left transition-colors hover:bg-sand-alt"
+    >
+      <IconTile Icon={Icon} tint={tint} size={38} rounded="full" iconSize={18} />
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold leading-tight text-ink">{title}</p>
+        <p className="mt-1 text-[11px] leading-4 text-ink-soft">{description}</p>
+      </div>
+    </button>
+  )
+}
+
+function IdeaRow({
+  idea,
+  choice,
+  liking,
+  planning,
+  deleting,
+  isOwner,
+  onChoose,
+  onPlan,
+  onDelete,
+}: {
+  idea: Idea
+  choice?: IdeaChoice
+  liking: boolean
+  planning: boolean
+  deleting: boolean
+  isOwner: boolean
+  onChoose: (choice: IdeaChoice) => void
+  onPlan: () => void
+  onDelete: () => void
+}) {
+  const category = categoryFor(idea.title)
+
+  return (
+    <Card className="border border-stone/70 p-3.5">
+      <div className="flex items-start gap-3">
+        <IconTile Icon={category.Icon} tint={category.tint} size={68} rounded="full" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-[22px] font-bold leading-tight text-ink">{idea.title}</h3>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
+                <span className="inline-flex items-center gap-1">
+                  <UsersIcon size={12} />
+                  {idea.likes} interested
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <StarIcon size={12} />
+                  {choice === 'best' ? 'You said best' : choice === 'works' ? 'You said works' : choice === 'pass' ? 'You passed' : 'Waiting on your take'}
+                </span>
+              </div>
+            </div>
+            {isOwner ? (
+              <button
+                onClick={onDelete}
+                disabled={deleting}
+                className="rounded-full p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
+                aria-label="Delete idea"
+              >
+                <XIcon size={14} />
+              </button>
+            ) : null}
+          </div>
+
+          {idea.description ? (
+            <p className="mt-2 text-sm leading-6 text-ink-soft line-clamp-2">{idea.description}</p>
+          ) : null}
+
+          <div className="mt-3 flex items-center gap-1.5">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <span
+                key={index}
+                className={`h-2.5 w-2.5 rounded-full ${index < filledDots(idea.likes) ? tintDot(category.tint) : 'bg-stone'}`}
+              />
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <PreferenceButton
+              active={choice === 'best'}
+              tint="olive"
+              label="Best"
+              Icon={StarIcon}
+              disabled={liking}
+              onClick={() => onChoose('best')}
+            />
+            <PreferenceButton
+              active={choice === 'works'}
+              tint="amber"
+              label="Works"
+              Icon={CheckIcon}
+              disabled={liking}
+              onClick={() => onChoose('works')}
+            />
+            <PreferenceButton
+              active={choice === 'pass'}
+              tint="blush"
+              label="Pass"
+              Icon={XIcon}
+              disabled={liking}
+              onClick={() => onChoose('pass')}
+            />
+            <button
+              onClick={onPlan}
+              disabled={planning}
+              className="ml-auto inline-flex items-center gap-2 rounded-full bg-olive px-4 py-2 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
+            >
+              {planning ? 'Planning…' : 'Plan Event'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function PreferenceButton({
+  Icon,
+  label,
+  tint,
+  active,
+  disabled,
+  onClick,
+}: {
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  label: string
+  tint: 'olive' | 'amber' | 'blush'
+  active: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  const activeClass =
+    tint === 'olive' ? 'bg-olive-soft text-olive' :
+    tint === 'amber' ? 'bg-amber-soft text-amber' :
+    'bg-blush-soft text-blush'
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40',
+        active ? activeClass : 'bg-sand text-ink-soft hover:bg-stone',
+      ].join(' ')}
+    >
+      <Icon size={13} />
+      {label}
+    </button>
+  )
+}
+
+function BacklogCard({ idea }: { idea: Idea }) {
+  const category = categoryFor(idea.title)
+  return (
+    <Card className="min-w-[152px] border border-stone/70 p-3">
+      <div className="flex items-center gap-2.5">
+        <IconTile Icon={category.Icon} tint={category.tint} size={36} rounded="full" iconSize={18} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{idea.title}</p>
+          <p className="mt-1 text-[11px] text-ink-mute">{idea.likes} interested</p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function TurnedPlanCard({ event }: { event: EventLite }) {
+  const category = categoryFor(event.title)
+  const status = event.status === 'confirmed' ? 'confirmed' : event.participantCount > 0 ? 'voting' : 'tentative'
+
+  return (
+    <LinkCard href={`/events/${event.id}`}>
+      <div className="flex items-center gap-3">
+        <IconTile Icon={category.Icon} tint={category.tint} size={48} rounded="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold text-ink">{event.title}</p>
+          <p className="mt-1 text-xs text-ink-soft">
+            {event.confirmed_date
+              ? formatDateRangeShort(event.confirmed_date, event.confirmed_end_date)
+              : relativePlanLabel(event.created_at)}
+          </p>
+          <div className="mt-1.5">
+            <StatusChip status={status} size="xs" />
+          </div>
+        </div>
+        <ChevronRightIcon size={16} className="text-ink-faint" />
+      </div>
+    </LinkCard>
+  )
+}
+
+function LinkCard({
+  href,
+  children,
+}: {
+  href: string
+  children: ReactNode
+}) {
+  return (
+    <Link href={href} className="block">
+      <Card className="border border-stone/70 p-3.5 transition-transform active:scale-[0.99]">
+        {children}
+      </Card>
+    </Link>
+  )
+}
+
+function LinkishButton({
+  label,
+  href,
+  onClick,
+}: {
+  label: string
+  href?: string
+  onClick?: () => void
+}) {
+  if (href) {
+    return (
+      <LinkCardText href={href} label={label} />
+    )
+  }
+
+  return (
+    <button onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
+      {label}
+      <ChevronRightIcon size={14} />
+    </button>
+  )
+}
+
+function LinkCardText({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
+      {label}
+      <ChevronRightIcon size={14} />
+    </Link>
+  )
+}
+
+function filledDots(likes: number) {
+  if (likes <= 0) return 1
+  return Math.min(6, likes)
+}
+
+function tintDot(tint: CategoryTint) {
+  switch (tint) {
+    case 'sage':
+      return 'bg-sage'
+    case 'olive':
+      return 'bg-olive'
+    case 'terracotta':
+      return 'bg-terracotta'
+    case 'teal':
+      return 'bg-teal'
+    case 'lavender':
+      return 'bg-lavender'
+    case 'amber':
+      return 'bg-amber'
+    case 'blush':
+      return 'bg-blush'
+  }
+}
+
+function normalizeTitle(title: string) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function titlesMatch(a: string, b: string) {
+  return normalizeTitle(a) === normalizeTitle(b)
+}
+
+function findMatchingEvent(title: string, events: EventLite[]) {
+  return events.find((event) => titlesMatch(title, event.title))
+}
+
+function relativePlanLabel(createdAt: string) {
+  const created = createdAt.slice(0, 10)
+  const today = todayISO()
+  if (created === today) return 'Turned into a plan today'
+  return `Planned ${created}`
+}
+
+function scrollToRef(ref: RefObject<HTMLElement | null>) {
+  ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }

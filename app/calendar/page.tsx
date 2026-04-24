@@ -1,229 +1,576 @@
 'use client'
 
-// Calendar / Plans — month view + upcoming events + this-week strip.
-//  1. Serif "Calendar" header (with month nav)
-//  2. Month grid; each day renders colored dots for events/blackouts
-//  3. Legend
-//  4. Upcoming events list (confirmed + voting, chronological)
-//  5. This week availability strip
-
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useName } from '@/lib/useName'
-import { loadPlanData, PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import { categoryFor } from '@/lib/categories'
+import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
+import { STATUS, type EventStatus } from '@/lib/status'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import StatusChip from '../components/StatusChip'
 import IconTile from '../components/IconTile'
 import { AvatarStack } from '../components/Avatar'
-import { ChevronLeftIcon, ChevronRightIcon } from '../components/icons'
+import { CalendarIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, UsersIcon } from '../components/icons'
+
+type ViewMode = 'month' | 'week' | 'list'
 
 type DayMeta = {
-  confirmed: string[]   // event ids
-  voting: string[]      // event ids
-  blockedCount: number
+  counts: Record<EventStatus, number>
+  eventIds: string[]
 }
+
+const STATUS_ORDER: EventStatus[] = ['confirmed', 'voting', 'tentative', 'hosting']
 
 export default function CalendarPage() {
   const [name] = useName()
   const [data, setData] = useState<PlanData | null>(null)
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date()
-    return { year: d.getFullYear(), month: d.getMonth() } // 0-indexed
+  const [viewMode, setViewMode] = useState<ViewMode>('month')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [activeStatuses, setActiveStatuses] = useState<Record<EventStatus, boolean>>({
+    confirmed: true,
+    voting: true,
+    tentative: true,
+    hosting: true,
   })
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const date = new Date()
+    return { year: date.getFullYear(), month: date.getMonth() }
+  })
+  const [weekCursor, setWeekCursor] = useState(() => startOfWeek(new Date()))
 
   useEffect(() => {
     let alive = true
-    loadPlanData(name || null).then((d) => { if (alive) setData(d) })
-    return () => { alive = false }
+    loadPlanData(name || null).then((next) => {
+      if (alive) setData(next)
+    })
+    return () => {
+      alive = false
+    }
   }, [name])
 
-  // Build per-day metadata for any date we might render
-  const dayMap = useMemo<Record<string, DayMeta>>(() => {
-    if (!data) return {}
-    const map: Record<string, DayMeta> = {}
-    const touch = (iso: string): DayMeta => (map[iso] ??= { confirmed: [], voting: [], blockedCount: 0 })
+  const filteredEvents = useMemo(() => {
+    return (data?.events ?? []).filter((event) => activeStatuses[event.displayStatus])
+  }, [data?.events, activeStatuses])
 
-    for (const ev of data.events) {
-      if (!ev.topDate) continue
-      const days = daysBetween(ev.topDate, ev.topEndDate)
-      for (const d of days) {
-        const m = touch(d)
-        if (ev.displayStatus === 'confirmed') m.confirmed.push(ev.id)
-        else if (ev.displayStatus === 'voting') m.voting.push(ev.id)
+  const upcomingEvents = useMemo(() => {
+    return filteredEvents
+      .filter((event) => event.topDate && event.topDate >= todayISO())
+      .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))
+  }, [filteredEvents])
+
+  const monthDayMap = useMemo<Record<string, DayMeta>>(() => {
+    const map: Record<string, DayMeta> = {}
+    for (const event of filteredEvents) {
+      if (!event.topDate) continue
+      for (const day of daysBetween(event.topDate, event.topEndDate)) {
+        const entry = map[day] ?? {
+          counts: { confirmed: 0, voting: 0, tentative: 0, hosting: 0 },
+          eventIds: [],
+        }
+        entry.counts[event.displayStatus] += 1
+        entry.eventIds.push(event.id)
+        map[day] = entry
       }
     }
-    for (const [d, names] of Object.entries(data.blackoutsByDate)) {
-      touch(d).blockedCount = names.length
-    }
     return map
-  }, [data])
+  }, [filteredEvents])
 
-  const monthName = new Date(cursor.year, cursor.month, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-
-  const upcoming = (data?.events ?? [])
-    .filter((e) => e.topDate && e.topDate >= todayISO())
-    .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))
-    .slice(0, 5)
+  const weekDays = buildWeek(weekCursor)
+  const weekEvents = weekDays.map((date) => ({
+    date,
+    events: filteredEvents.filter((event) => spansDate(event, date)),
+  }))
 
   return (
     <main className="max-w-md mx-auto px-5">
-      <PageHeader variant="title" title="Calendar" subtitle="See the whole summer at a glance" />
+      <PageHeader
+        variant="title"
+        title="Calendar"
+        subtitle="See what's planned and when."
+        action={(
+          <div className="flex justify-end">
+            <Link
+              href="/events"
+              className="inline-flex items-center gap-2 rounded-full bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
+            >
+              <PlusIcon size={16} />
+              New Event
+            </Link>
+          </div>
+        )}
+      />
 
-      {/* Month nav */}
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+      <Card className="border border-stone/70 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <ViewTabs value={viewMode} onChange={setViewMode} />
           <button
-            onClick={() => setCursor(shiftMonth(cursor, -1))}
-            className="w-9 h-9 rounded-full bg-sand hover:bg-stone transition-colors flex items-center justify-center text-ink-soft"
-            aria-label="Previous month"
+            onClick={() => setFiltersOpen((current) => !current)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-sand px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-stone"
           >
-            <ChevronLeftIcon size={18} />
-          </button>
-          <h2 className="font-serif text-xl font-black text-ink">{monthName}</h2>
-          <button
-            onClick={() => setCursor(shiftMonth(cursor, 1))}
-            className="w-9 h-9 rounded-full bg-sand hover:bg-stone transition-colors flex items-center justify-center text-ink-soft"
-            aria-label="Next month"
-          >
-            <ChevronRightIcon size={18} />
+            Filters
+            <ChevronDownIcon size={14} className={filtersOpen ? 'rotate-180' : ''} />
           </button>
         </div>
 
-        {/* Week header */}
-        <div className="grid grid-cols-7 gap-1 text-[10px] font-bold text-ink-mute uppercase tracking-wider text-center">
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-            <div key={i}>{d}</div>
-          ))}
+        {filtersOpen ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {STATUS_ORDER.map((status) => (
+              <FilterChip
+                key={status}
+                status={status}
+                active={activeStatuses[status]}
+                onClick={() => {
+                  setActiveStatuses((current) => ({
+                    ...current,
+                    [status]: !current[status],
+                  }))
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {viewMode === 'list' ? (
+          <div className="mt-5">
+            <h2 className="text-center font-serif text-xl font-black text-ink">Upcoming list</h2>
+          </div>
+        ) : (
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <button
+              onClick={() => {
+                if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, -1))
+                if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, -7))
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sand text-ink-soft transition-colors hover:bg-stone"
+              aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
+            >
+              <ChevronLeftIcon size={18} />
+            </button>
+            <h2 className="font-serif text-xl font-black text-ink">
+              {viewMode === 'month' ? formatMonthLabel(monthCursor) : formatWeekLabel(weekCursor)}
+            </h2>
+            <button
+              onClick={() => {
+                if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, 1))
+                if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, 7))
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sand text-ink-soft transition-colors hover:bg-stone"
+              aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
+            >
+              <ChevronRightIcon size={18} />
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4">
+          {viewMode === 'month' ? (
+            <MonthView year={monthCursor.year} month={monthCursor.month} dayMap={monthDayMap} />
+          ) : viewMode === 'week' ? (
+            <WeekView days={weekEvents} />
+          ) : (
+            <ListView events={upcomingEvents.slice(0, 8)} />
+          )}
         </div>
 
-        {/* Day grid */}
-        <MonthGrid year={cursor.year} month={cursor.month} dayMap={dayMap} />
-
-        {/* Legend */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-ink-soft pt-1">
-          <LegendDot color="bg-olive" label="Confirmed" />
-          <LegendDot color="bg-terracotta" label="Voting" />
-          <LegendDot color="bg-blush" label="Blocked" />
-          <LegendDot color="bg-stone" label="Today" outline />
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-ink-soft">
+          <LegendDot status="confirmed" label="Confirmed" />
+          <LegendDot status="voting" label="Needs Votes" />
+          <LegendDot status="tentative" label="Tentative" />
+          <LegendDot status="hosting" label="Hosting" />
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full ring-1 ring-olive bg-cream" />
+            Today
+          </span>
         </div>
       </Card>
 
-      {/* Upcoming events */}
-      <section className="mt-6">
-        <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">Upcoming</h2>
-        {upcoming.length === 0 ? (
-          <Card>
-            <p className="text-sm text-ink-soft">Nothing on the books yet. Head to <Link href="/events" className="text-olive font-semibold">Events</Link> to propose one.</p>
+      <section className="mt-7">
+        <SectionHeader title="Upcoming Events" href="/events" linkLabel="See all" />
+        {upcomingEvents.length === 0 ? (
+          <Card className="border border-stone/70 py-6">
+            <p className="text-sm text-ink-soft">
+              No filtered events match right now. Try a different filter or create a new event.
+            </p>
           </Card>
         ) : (
-          <div className="flex flex-col gap-2.5">
-            {upcoming.map((ev) => {
-              const cat = categoryFor(ev.title)
-              return (
-                <Link key={ev.id} href={`/events/${ev.id}`}>
-                  <Card className="flex items-center gap-3">
-                    <IconTile Icon={cat.Icon} tint={cat.tint} size={48} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <StatusChip status={ev.displayStatus} size="xs" />
-                      </div>
-                      <p className="font-semibold text-ink truncate">{ev.title}</p>
-                      <p className="text-xs text-ink-soft mt-0.5 truncate">
-                        {ev.topDate ? formatDateRangeShort(ev.topDate, ev.topEndDate) : 'TBD'}
-                      </p>
-                    </div>
-                    <AvatarStack names={ev.participantNames} max={3} size={22} />
-                  </Card>
-                </Link>
-              )
-            })}
+          <div className="flex flex-col gap-3">
+            {upcomingEvents.slice(0, 4).map((event) => (
+              <EventRow key={event.id} event={event} />
+            ))}
           </div>
         )}
       </section>
 
-      {!data && (
-        <div className="mt-6 h-32 bg-cream rounded-[var(--radius-lg)] animate-pulse" />
-      )}
+      <section className="mt-7 mb-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">This Week</h2>
+          <button
+            onClick={() => setViewMode('week')}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
+          >
+            See week view
+            <ChevronRightIcon size={14} />
+          </button>
+        </div>
+        <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
+          {buildWeek(startOfWeek(new Date())).map((date) => {
+            const dayEvents = filteredEvents.filter((event) => spansDate(event, date))
+            return (
+              <WeekStripCard key={date} date={date} event={dayEvents[0]} />
+            )
+          })}
+        </div>
+      </section>
     </main>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-
-function MonthGrid({
-  year, month, dayMap,
-}: { year: number; month: number; dayMap: Record<string, DayMeta> }) {
-  const first = new Date(year, month, 1)
-  const startWeekday = first.getDay() // 0 = Sunday
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-
-  // Pad leading blanks
-  const cells: (string | null)[] = Array.from({ length: startWeekday }, () => null)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    cells.push(iso)
-  }
-  // Pad trailing to complete the last row
-  while (cells.length % 7 !== 0) cells.push(null)
-
-  const today = todayISO()
-
+function ViewTabs({
+  value,
+  onChange,
+}: {
+  value: ViewMode
+  onChange: (view: ViewMode) => void
+}) {
   return (
-    <div className="grid grid-cols-7 gap-1">
-      {cells.map((iso, i) => {
-        if (!iso) return <div key={i} className="aspect-square" />
-        const meta = dayMap[iso]
-        const isToday = iso === today
-        const isPast = iso < today
-        const day = Number(iso.slice(8, 10))
-        return (
-          <div
-            key={iso}
-            className={[
-              'aspect-square rounded-xl flex flex-col items-center justify-center relative',
-              isToday ? 'bg-olive-tint ring-1 ring-olive' : 'bg-sand-alt',
-              isPast ? 'opacity-45' : '',
-            ].join(' ')}
-          >
-            <span className={`text-sm font-semibold ${isToday ? 'text-olive' : 'text-ink'}`}>{day}</span>
-            {meta && (meta.confirmed.length + meta.voting.length + (meta.blockedCount > 0 ? 1 : 0) > 0) && (
-              <div className="flex gap-0.5 absolute bottom-1.5">
-                {meta.confirmed.length > 0 && <span className="w-1 h-1 rounded-full bg-olive" />}
-                {meta.voting.length > 0 && <span className="w-1 h-1 rounded-full bg-terracotta" />}
-                {meta.blockedCount > 0 && <span className="w-1 h-1 rounded-full bg-blush" />}
-              </div>
-            )}
-          </div>
-        )
-      })}
+    <div className="inline-flex rounded-full bg-sand p-1">
+      {(['month', 'week', 'list'] as ViewMode[]).map((view) => (
+        <button
+          key={view}
+          onClick={() => onChange(view)}
+          className={[
+            'rounded-full px-3 py-1.5 text-sm font-semibold transition-colors',
+            value === view ? 'bg-cream text-ink shadow-[var(--shadow-soft)]' : 'text-ink-soft',
+          ].join(' ')}
+        >
+          {view.charAt(0).toUpperCase() + view.slice(1)}
+        </button>
+      ))}
     </div>
   )
 }
 
-function LegendDot({ color, label, outline }: { color: string; label: string; outline?: boolean }) {
+function FilterChip({
+  status,
+  active,
+  onClick,
+}: {
+  status: EventStatus
+  active: boolean
+  onClick: () => void
+}) {
+  const token = STATUS[status]
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors',
+        active ? `${token.tint} ${token.text}` : 'bg-sand text-ink-soft',
+      ].join(' ')}
+    >
+      <span className={`h-2 w-2 rounded-full ${token.dot}`} />
+      {token.label}
+    </button>
+  )
+}
+
+function MonthView({
+  year,
+  month,
+  dayMap,
+}: {
+  year: number
+  month: number
+  dayMap: Record<string, DayMeta>
+}) {
+  const today = todayISO()
+  const first = new Date(year, month, 1)
+  const firstGridDay = new Date(first)
+  firstGridDay.setDate(first.getDate() - first.getDay())
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstGridDay)
+    date.setDate(firstGridDay.getDate() + index)
+    const iso = date.toISOString().split('T')[0]
+    return {
+      iso,
+      day: date.getDate(),
+      currentMonth: date.getMonth() === month,
+      meta: dayMap[iso],
+    }
+  })
+
+  return (
+    <div>
+      <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-mute">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
+          <div key={label}>{label}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((cell) => {
+          const primary = dominantStatus(cell.meta)
+          const extraStatuses = cell.meta ? STATUS_ORDER.filter((status) => cell.meta.counts[status] > 0 && status !== primary) : []
+          const isToday = cell.iso === today
+          return (
+            <div
+              key={cell.iso}
+              className={[
+                'aspect-square rounded-2xl px-1.5 py-1.5',
+                cell.currentMonth ? 'bg-sand-alt' : 'bg-sand/70',
+              ].join(' ')}
+            >
+              <div className="flex h-full flex-col items-center justify-between">
+                <span
+                  className={[
+                    'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                    primary ? `${STATUS[primary].tint} ${STATUS[primary].text}` : '',
+                    !cell.currentMonth ? 'text-ink-mute' : primary ? '' : 'text-ink',
+                    isToday ? 'ring-1 ring-olive' : '',
+                  ].join(' ')}
+                >
+                  {cell.day}
+                </span>
+                <div className="flex items-center gap-1 pb-0.5">
+                  {primary ? <span className={`h-1.5 w-1.5 rounded-full ${STATUS[primary].dot}`} /> : null}
+                  {extraStatuses.slice(0, 2).map((status) => (
+                    <span key={status} className={`h-1.5 w-1.5 rounded-full ${STATUS[status].dot}`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function WeekView({
+  days,
+}: {
+  days: { date: string; events: EnrichedEvent[] }[]
+}) {
+  return (
+    <div className="overflow-x-auto scrollbar-hidden">
+      <div className="grid min-w-[560px] grid-cols-7 gap-2">
+        {days.map(({ date, events }) => (
+          <Card key={date} className="border border-stone/70 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+              {formatWeekday(date)}
+            </p>
+            <p className="mt-1 text-lg font-bold text-ink">{formatDayNumber(date)}</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {events.length === 0 ? (
+                <p className="text-xs text-ink-mute">No events</p>
+              ) : (
+                events.slice(0, 2).map((event) => (
+                  <Link
+                    key={event.id}
+                    href={`/events/${event.id}`}
+                    className={`rounded-2xl px-2.5 py-2 text-xs font-medium ${STATUS[event.displayStatus].tint} ${STATUS[event.displayStatus].text}`}
+                  >
+                    <p className="line-clamp-2">{event.title}</p>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ListView({ events }: { events: EnrichedEvent[] }) {
+  if (events.length === 0) {
+    return (
+      <Card className="border border-stone/70 py-6">
+        <p className="text-sm text-ink-soft">Nothing upcoming with the current filters.</p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {events.map((event) => (
+        <EventRow key={event.id} event={event} />
+      ))}
+    </div>
+  )
+}
+
+function EventRow({ event }: { event: EnrichedEvent }) {
+  const category = categoryFor(event.title)
+  return (
+    <Link href={`/events/${event.id}`}>
+      <Card className="overflow-hidden border border-stone/70 p-0">
+        <div className="flex">
+          <span className={`w-1.5 shrink-0 ${STATUS[event.displayStatus].dot}`} />
+          <div className="flex flex-1 items-center gap-3 px-3 py-3">
+            <IconTile Icon={category.Icon} tint={category.tint} size={50} rounded="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-ink">{event.title}</p>
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-soft">
+                <CalendarIcon size={12} />
+                <span>{event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}</span>
+              </div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-mute">
+                <UsersIcon size={12} />
+                <span>{event.participantNames.length} people in the loop</span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <StatusChip status={event.displayStatus} size="xs" />
+              <AvatarStack names={event.participantNames} max={4} size={24} />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  )
+}
+
+function WeekStripCard({
+  date,
+  event,
+}: {
+  date: string
+  event?: EnrichedEvent
+}) {
+  return (
+    <Card className="min-w-[104px] border border-stone/70 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">
+        {formatWeekday(date)}
+      </p>
+      <p className="mt-1 text-lg font-bold text-ink">{formatDayNumber(date)}</p>
+      <div className="mt-3">
+        {event ? (
+          <>
+            <div className={`inline-flex h-2.5 w-2.5 rounded-full ${STATUS[event.displayStatus].dot}`} />
+            <p className="mt-2 text-sm font-semibold leading-tight text-ink line-clamp-2">{event.title}</p>
+            <p className="mt-1 text-[11px] text-ink-soft">{labelForWeekCard(event)}</p>
+          </>
+        ) : (
+          <p className="mt-6 text-xs text-ink-mute">No events</p>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function SectionHeader({
+  title,
+  href,
+  linkLabel,
+}: {
+  title: string
+  href: string
+  linkLabel: string
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="font-sans text-[30px] font-bold tracking-tight text-ink">{title}</h2>
+      <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
+        {linkLabel}
+        <ChevronRightIcon size={14} />
+      </Link>
+    </div>
+  )
+}
+
+function LegendDot({
+  status,
+  label,
+}: {
+  status: EventStatus
+  label: string
+}) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={`w-2 h-2 rounded-full ${color} ${outline ? 'ring-1 ring-olive bg-olive-tint' : ''}`} />
+      <span className={`h-2.5 w-2.5 rounded-full ${STATUS[status].dot}`} />
       {label}
     </span>
   )
 }
 
-function shiftMonth(c: { year: number; month: number }, delta: number) {
-  const d = new Date(c.year, c.month + delta, 1)
-  return { year: d.getFullYear(), month: d.getMonth() }
+function dominantStatus(meta?: DayMeta) {
+  if (!meta) return null
+  return STATUS_ORDER.find((status) => meta.counts[status] > 0) ?? null
 }
 
-function daysBetween(start: string, end: string | null | undefined): string[] {
+function daysBetween(start: string, end: string | null | undefined) {
   if (!end || end === start) return [start]
-  const out: string[] = []
-  const cur = new Date(start + 'T12:00:00')
+  const output: string[] = []
+  const current = new Date(start + 'T12:00:00')
   const stop = new Date(end + 'T12:00:00')
-  while (cur <= stop) {
-    out.push(cur.toISOString().split('T')[0])
-    cur.setDate(cur.getDate() + 1)
+  while (current <= stop) {
+    output.push(current.toISOString().split('T')[0])
+    current.setDate(current.getDate() + 1)
   }
-  return out
+  return output
+}
+
+function spansDate(event: EnrichedEvent, date: string) {
+  if (!event.topDate) return false
+  return daysBetween(event.topDate, event.topEndDate).includes(date)
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date)
+  next.setHours(12, 0, 0, 0)
+  next.setDate(next.getDate() - next.getDay())
+  return next
+}
+
+function shiftWeek(date: Date, deltaDays: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + deltaDays)
+  return next
+}
+
+function buildWeek(start: Date) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + index)
+    return date.toISOString().split('T')[0]
+  })
+}
+
+function shiftMonth(cursor: { year: number; month: number }, delta: number) {
+  const next = new Date(cursor.year, cursor.month + delta, 1)
+  return { year: next.getFullYear(), month: next.getMonth() }
+}
+
+function formatMonthLabel(cursor: { year: number; month: number }) {
+  return new Date(cursor.year, cursor.month, 1).toLocaleString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function formatWeekLabel(date: Date) {
+  const start = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const endDate = new Date(date)
+  endDate.setDate(date.getDate() + 6)
+  const end = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${start} – ${end}`
+}
+
+function formatWeekday(date: string) {
+  return new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' })
+}
+
+function formatDayNumber(date: string) {
+  return new Date(date + 'T12:00:00').getDate()
+}
+
+function labelForWeekCard(event: EnrichedEvent) {
+  if (event.displayStatus === 'voting') {
+    return `${event.voteCount} votes`
+  }
+  if (event.displayStatus === 'hosting') {
+    return event.dateOptions.length > 0 ? 'Needs votes' : 'Add dates'
+  }
+  return event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'
 }

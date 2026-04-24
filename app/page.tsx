@@ -1,34 +1,30 @@
 'use client'
 
-// Home — the "what's happening this summer" snapshot.
-//  1. Greeting header
-//  2. Four-tile summary (Confirmed / Voting / Ideas / My next)
-//  3. Up Next — the featured confirmed or top-voting event
-//  4. Votes in Progress — what needs my attention
-//  5. New Ideas strip — recent ideas the group tossed out
-//  6. Availability Snapshot — how many friends free / blocked this week
-//
-// Everything flows from loadPlanData() so the numbers always agree.
-
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useName } from '@/lib/useName'
-import { loadPlanData, PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
-import { categoryFor } from '@/lib/categories'
+import { categoryFor, type CategoryTint } from '@/lib/categories'
+import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import PageHeader from './components/PageHeader'
 import Card from './components/Card'
-import StatusChip from './components/StatusChip'
 import IconTile from './components/IconTile'
-import SummaryTile from './components/SummaryTile'
 import { AvatarStack } from './components/Avatar'
 import {
-  CalendarIcon,
-  LightbulbIcon,
-  StarIcon,
-  UsersIcon,
   ArrowRightIcon,
+  CalendarIcon,
   ChevronRightIcon,
+  LightbulbIcon,
+  UsersIcon,
 } from './components/icons'
+
+type FeatureCard = {
+  href: string
+  title: string
+  description: string
+  eyebrow: string
+  tint: CategoryTint
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+}
 
 export default function Home() {
   const [name] = useName()
@@ -36,183 +32,165 @@ export default function Home() {
 
   useEffect(() => {
     let alive = true
-    loadPlanData(name || null).then((d) => { if (alive) setData(d) })
-    return () => { alive = false }
+    loadPlanData(name || null).then((next) => {
+      if (alive) setData(next)
+    })
+    return () => {
+      alive = false
+    }
   }, [name])
 
-  const confirmedEvents = data?.events.filter((e) => e.displayStatus === 'confirmed') ?? []
-  const votingEvents    = data?.events.filter((e) => e.displayStatus === 'voting') ?? []
-  const ideas           = data?.ideas ?? []
+  const events = data?.events ?? []
+  const ideas = data?.ideas ?? []
+  const today = todayISO()
 
-  // Featured "Up Next" — soonest confirmed, else the one with most votes in progress.
-  const featured =
-    [...confirmedEvents]
-      .filter((e) => e.topDate && e.topDate >= todayISO())
-      .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))[0]
-    ??
-    [...votingEvents].sort((a, b) => b.voteCount - a.voteCount)[0]
-    ??
-    data?.events[0]
+  const votingEvents = [...events]
+    .filter((event) => event.displayStatus === 'voting')
+    .sort((a, b) => {
+      const dateRank = (a.topDate ?? '9999-12-31').localeCompare(b.topDate ?? '9999-12-31')
+      if (dateRank !== 0) return dateRank
+      return b.voteCount - a.voteCount
+    })
+
+  const hostingEvents = [...events]
+    .filter((event) => event.displayStatus === 'hosting')
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+  const upcomingPlans = [...events]
+    .filter((event) => event.displayStatus === 'confirmed' && event.topDate && event.topDate >= today)
+    .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))
+
+  const topIdeas = [...ideas]
+    .sort((a, b) => {
+      if (b.likes !== a.likes) return b.likes - a.likes
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+    })
+    .slice(0, 6)
+
+  const jumpBackIn = votingEvents[0] ?? hostingEvents[0] ?? upcomingPlans[0] ?? events[0]
+
+  const featureCards: FeatureCard[] = [
+    {
+      href: '/availability',
+      title: 'Availability',
+      description: 'Mark blackout dates and keep the group visible.',
+      eyebrow: data ? `${countBlockedThisWeek(data)} blocked this week` : 'Keep the crew aligned',
+      tint: 'sage',
+      Icon: CalendarIcon,
+    },
+    {
+      href: '/events',
+      title: 'Event Voting',
+      description: 'Vote on dates and get plans across the line.',
+      eyebrow: data ? `${votingEvents.length} event${votingEvents.length === 1 ? '' : 's'} need input` : 'Help decide next',
+      tint: 'terracotta',
+      Icon: UsersIcon,
+    },
+    {
+      href: '/ideas',
+      title: 'Ideas Hub',
+      description: 'Capture ideas and turn the good ones into plans.',
+      eyebrow: data ? `${ideas.length} idea${ideas.length === 1 ? '' : 's'} in rotation` : 'Keep the momentum going',
+      tint: 'olive',
+      Icon: LightbulbIcon,
+    },
+  ]
 
   return (
     <main className="max-w-md mx-auto px-5">
       <PageHeader variant="greeting" />
 
-      {/* 4-up summary */}
-      <section className="grid grid-cols-2 gap-3">
-        <SummaryTile
-          Icon={CalendarIcon}
-          tint="olive"
-          title={`${confirmedEvents.length} confirmed`}
-          description="plans locked in"
-          href="/calendar"
-        />
-        <SummaryTile
-          Icon={StarIcon}
-          tint="terracotta"
-          title={`${votingEvents.length} voting`}
-          description="need your input"
-          href="/events"
-        />
-        <SummaryTile
-          Icon={LightbulbIcon}
-          tint="amber"
-          title={`${ideas.length} ideas`}
-          description="in the hopper"
-          href="/ideas"
-        />
-        <SummaryTile
-          Icon={UsersIcon}
-          tint="teal"
-          title={`${data?.totalFriends ?? 12} friends`}
-          description="in the crew"
-          href="/me"
-        />
-      </section>
+      {!data ? (
+        <HomeSkeleton />
+      ) : (
+        <>
+          <section className="grid grid-cols-3 gap-3">
+            {featureCards.map((card) => (
+              <FeatureRouteCard key={card.href} {...card} />
+            ))}
+          </section>
 
-      {/* Up Next */}
-      {data && featured && (
-        <section className="mt-6">
-          <SectionHeader title="Up next" href="/calendar" linkLabel="View all" />
-          <FeaturedEventCard event={featured} />
-        </section>
-      )}
+          {jumpBackIn && (
+            <section className="mt-7">
+              <SectionHeader title="Jump back in" href="/events" linkLabel="See all" />
+              <JumpBackInCard event={jumpBackIn} />
+            </section>
+          )}
 
-      {/* Votes in progress */}
-      {data && votingEvents.length > 0 && (
-        <section className="mt-6">
-          <SectionHeader title="Votes in progress" href="/events" linkLabel={`${votingEvents.length} open`} />
-          <div className="flex flex-col gap-2.5">
-            {votingEvents.slice(0, 3).map((ev) => {
-              const cat = categoryFor(ev.title)
-              return (
-                <Link key={ev.id} href={`/events/${ev.id}`}>
-                  <Card className="flex items-center gap-3">
-                    <IconTile Icon={cat.Icon} tint={cat.tint} size={44} />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-ink truncate">{ev.title}</p>
-                      <p className="text-xs text-ink-soft mt-0.5 truncate">
-                        {ev.dateOptions.length} options · {ev.voteCount} votes
-                      </p>
-                    </div>
-                    <StatusChip status="voting" size="xs" />
-                    <ChevronRightIcon size={18} className="text-ink-faint" />
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-      )}
+          <section className="mt-7">
+            <SectionHeader title="Upcoming Plans" href="/calendar" linkLabel="See all" />
+            {upcomingPlans.length === 0 ? (
+              <Card className="py-5">
+                <p className="text-sm text-ink-soft">
+                  Nothing is locked yet. Head to <Link href="/events" className="font-semibold text-olive">Event Voting</Link> and help land the next one.
+                </p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {upcomingPlans.slice(0, 4).map((event) => (
+                  <UpcomingPlanCard key={event.id} event={event} />
+                ))}
+              </div>
+            )}
+          </section>
 
-      {/* Ideas strip */}
-      {data && ideas.length > 0 && (
-        <section className="mt-6">
-          <SectionHeader title="Fresh ideas" href="/ideas" linkLabel="See all" />
-          <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
-            {ideas.slice(0, 6).map((idea) => {
-              const cat = categoryFor(idea.title)
-              return (
-                <Link
-                  key={idea.id}
-                  href="/ideas"
-                  className="min-w-[180px] max-w-[180px] shrink-0"
-                >
-                  <Card className="h-full flex flex-col gap-2">
-                    <IconTile Icon={cat.Icon} tint={cat.tint} size={40} />
-                    <p className="font-semibold text-ink text-sm leading-snug line-clamp-2">
-                      {idea.title}
-                    </p>
-                    <div className="mt-auto flex items-center gap-1.5 text-xs text-ink-soft">
-                      <StarIcon size={12} />
-                      <span>{idea.likes}</span>
-                    </div>
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Availability snapshot */}
-      {data && (
-        <section className="mt-6 mb-4">
-          <SectionHeader title="Who's around" href="/availability" linkLabel="Edit yours" />
-          <AvailabilitySnapshot data={data} />
-        </section>
-      )}
-
-      {/* Skeleton for first paint */}
-      {!data && (
-        <div className="mt-6 flex flex-col gap-3 animate-pulse">
-          <div className="h-32 bg-cream rounded-[var(--radius-lg)]" />
-          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
-          <div className="h-24 bg-cream rounded-[var(--radius-lg)]" />
-        </div>
+          {topIdeas.length > 0 && (
+            <section className="mt-7 mb-4">
+              <SectionHeader title="Ideas For You" href="/ideas" linkLabel="See all" />
+              <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
+                {topIdeas.map((idea) => (
+                  <IdeaSuggestionCard
+                    key={idea.id}
+                    title={idea.title}
+                    likes={idea.likes}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </main>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────── */
-
-function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
+function HomeSkeleton() {
   return (
-    <div className="flex items-baseline justify-between mb-3">
-      <h2 className="font-serif text-2xl font-black text-ink tracking-tight">{title}</h2>
-      {href && linkLabel && (
-        <Link href={href} className="text-xs font-semibold text-olive flex items-center gap-1">
-          {linkLabel}
-          <ArrowRightIcon size={12} />
-        </Link>
-      )}
+    <div className="mt-4 animate-pulse">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="h-48 rounded-[var(--radius-lg)] bg-cream" />
+        <div className="h-48 rounded-[var(--radius-lg)] bg-cream" />
+        <div className="h-48 rounded-[var(--radius-lg)] bg-cream" />
+      </div>
+      <div className="mt-7 h-40 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="mt-7 grid grid-cols-2 gap-3">
+        <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
+        <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
+      </div>
     </div>
   )
 }
 
-function FeaturedEventCard({ event }: { event: PlanData['events'][number] }) {
-  const cat = categoryFor(event.title)
-  const when = event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'
+function FeatureRouteCard({
+  href,
+  title,
+  description,
+  eyebrow,
+  tint,
+  Icon,
+}: FeatureCard) {
   return (
-    <Link href={`/events/${event.id}`}>
-      <Card className="relative overflow-hidden" padded={false}>
-        <div className="p-5 flex gap-4">
-          <IconTile Icon={cat.Icon} tint={cat.tint} size={56} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <StatusChip status={event.displayStatus} size="xs" />
-            </div>
-            <h3 className="font-serif text-[22px] font-black text-ink leading-tight truncate">
-              {event.title}
-            </h3>
-            <p className="text-sm text-ink-soft mt-0.5">{when}</p>
-          </div>
+    <Link href={href}>
+      <Card className="h-full min-h-[188px] flex flex-col gap-4 border border-stone/70 p-3.5">
+        <IconTile Icon={Icon} tint={tint} size={60} rounded="lg" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-mute">{eyebrow}</p>
+          <h2 className="mt-2 text-[15px] font-bold leading-tight text-ink">{title}</h2>
+          <p className="mt-1.5 text-[12px] leading-5 text-ink-soft">{description}</p>
         </div>
-        <div className="px-5 pb-4 pt-1 flex items-center justify-between">
-          <AvatarStack names={event.participantNames} max={5} size={26} />
-          <span className="text-xs font-medium text-ink-soft">
-            {event.participantNames.length} likely in
+        <div className="mt-auto flex justify-end">
+          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${strongTintCircle(tint)}`}>
+            <ArrowRightIcon size={16} />
           </span>
         </div>
       </Card>
@@ -220,45 +198,160 @@ function FeaturedEventCard({ event }: { event: PlanData['events'][number] }) {
   )
 }
 
-function AvailabilitySnapshot({ data }: { data: PlanData }) {
-  // Count: next 7 days, how many friends are blocked on at least one day.
-  const today = new Date()
-  const days: string[] = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today)
-    d.setDate(d.getDate() + i)
-    days.push(d.toISOString().split('T')[0])
-  }
-  const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+function JumpBackInCard({ event }: { event: EnrichedEvent }) {
+  const category = categoryFor(event.title)
+  const metaLabel = jumpBackInLabel(event)
+  const daysLabel = event.topDate ? relativeDateLabel(event.topDate) : 'Keep it moving'
 
   return (
-    <Card className="flex flex-col gap-3">
-      <div className="flex justify-between gap-1.5">
-        {days.map((d) => {
-          const blocked = data.blackoutsByDate[d]?.length ?? 0
-          const free = Math.max(0, data.totalFriends - blocked)
-          const pct = data.totalFriends ? free / data.totalFriends : 1
-          const dayOfWeek = new Date(d + 'T12:00:00').getDay()
-          const label = dayLabels[dayOfWeek]
-          const dayNum = new Date(d + 'T12:00:00').getDate()
-          const tintClass =
-            pct >= 0.75 ? 'bg-olive-soft text-olive' :
-            pct >= 0.5  ? 'bg-amber-soft text-amber' :
-                          'bg-blush-soft text-blush'
-          return (
-            <div key={d} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-[10px] font-semibold text-ink-mute">{label}</span>
-              <span className={`w-9 h-9 rounded-full text-xs font-bold flex items-center justify-center ${tintClass}`}>
-                {dayNum}
+    <Link href={`/events/${event.id}`}>
+      <Card className="border border-stone/70 p-0 overflow-hidden">
+        <div className="flex items-center gap-4 px-4 py-4">
+          <IconTile Icon={category.Icon} tint={category.tint} size={86} rounded="full" />
+          <div className="min-w-0 flex-1">
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${statusAccent(event.displayStatus)}`}>
+              {event.displayStatus === 'voting' ? 'Event Voting' : event.displayStatus === 'hosting' ? 'Hosting' : 'Upcoming Plan'}
+            </p>
+            <h3 className="mt-1 font-serif text-[30px] leading-[1.02] font-black text-ink tracking-tight truncate">
+              {event.title}
+            </h3>
+            <p className="mt-1 text-sm text-ink-soft">
+              {metaLabel} · {daysLabel}
+            </p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <AvatarStack names={event.participantNames} max={5} size={28} />
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sage-tint text-sage">
+                <ArrowRightIcon size={18} />
               </span>
-              <span className="text-[10px] text-ink-soft">{free}</span>
             </div>
-          )
-        })}
-      </div>
-      <p className="text-xs text-ink-soft text-center">
-        Circles show how many friends are free each day this week.
-      </p>
-    </Card>
+          </div>
+        </div>
+      </Card>
+    </Link>
   )
+}
+
+function UpcomingPlanCard({ event }: { event: EnrichedEvent }) {
+  const category = categoryFor(event.title)
+  return (
+    <Link href={`/events/${event.id}`}>
+      <Card className="h-full border border-stone/70 p-3.5">
+        <IconTile Icon={category.Icon} tint={category.tint} size={74} rounded="full" />
+        <h3 className="mt-3 text-[15px] font-bold leading-tight text-ink">{event.title}</h3>
+        <p className="mt-1 text-xs text-ink-soft">
+          {event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}
+        </p>
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-mute">
+          <UsersIcon size={13} />
+          <span>{event.participantNames.length}</span>
+        </div>
+      </Card>
+    </Link>
+  )
+}
+
+function IdeaSuggestionCard({
+  title,
+  likes,
+}: {
+  title: string
+  likes: number
+}) {
+  const category = categoryFor(title)
+  return (
+    <Link href="/ideas" className="min-w-[164px] max-w-[164px] shrink-0">
+      <Card className="h-full border border-stone/70 p-3">
+        <div className="flex items-center gap-2.5">
+          <IconTile Icon={category.Icon} tint={category.tint} size={42} rounded="full" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{title}</p>
+            <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-mute">
+              <UsersIcon size={12} />
+              <span>{likes} interested</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </Link>
+  )
+}
+
+function SectionHeader({
+  title,
+  href,
+  linkLabel,
+}: {
+  title: string
+  href: string
+  linkLabel: string
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="font-sans text-[31px] font-bold tracking-tight text-ink">{title}</h2>
+      <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
+        {linkLabel}
+        <ChevronRightIcon size={14} />
+      </Link>
+    </div>
+  )
+}
+
+function jumpBackInLabel(event: EnrichedEvent) {
+  if (event.displayStatus === 'voting') {
+    return `${event.dateOptions.length} option${event.dateOptions.length === 1 ? '' : 's'} · ${event.voteCount} vote${event.voteCount === 1 ? '' : 's'}`
+  }
+  if (event.displayStatus === 'hosting') {
+    return event.dateOptions.length > 0
+      ? `${event.dateOptions.length} date option${event.dateOptions.length === 1 ? '' : 's'} ready`
+      : 'Add dates and start the vote'
+  }
+  return event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Keep planning'
+}
+
+function relativeDateLabel(dateIso: string) {
+  const today = new Date(todayISO() + 'T12:00:00')
+  const target = new Date(dateIso + 'T12:00:00')
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (diff <= 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  if (diff < 7) return `${diff}d out`
+  return `${Math.ceil(diff / 7)}w out`
+}
+
+function countBlockedThisWeek(data: PlanData) {
+  const today = new Date()
+  let total = 0
+  for (let index = 0; index < 7; index += 1) {
+    const next = new Date(today)
+    next.setDate(next.getDate() + index)
+    const iso = next.toISOString().split('T')[0]
+    total += data.blackoutsByDate[iso]?.length ?? 0
+  }
+  return total
+}
+
+function strongTintCircle(tint: CategoryTint) {
+  switch (tint) {
+    case 'sage':
+      return 'bg-sage text-white'
+    case 'olive':
+      return 'bg-olive text-white'
+    case 'terracotta':
+      return 'bg-terracotta text-white'
+    case 'teal':
+      return 'bg-teal text-white'
+    case 'lavender':
+      return 'bg-lavender text-white'
+    case 'amber':
+      return 'bg-amber text-white'
+    case 'blush':
+      return 'bg-blush text-white'
+  }
+}
+
+function statusAccent(status: EnrichedEvent['displayStatus']) {
+  if (status === 'confirmed') return 'text-olive'
+  if (status === 'hosting') return 'text-teal'
+  if (status === 'tentative') return 'text-lavender'
+  return 'text-terracotta'
 }

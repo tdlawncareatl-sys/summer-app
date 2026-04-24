@@ -7,7 +7,7 @@ import { HomeIcon, CalendarIcon, LightbulbIcon, UserIcon, PlusIcon } from './ico
 
 const ITEMS: { href: string; label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }> }[] = [
   { href: '/',         label: 'Home',     Icon: HomeIcon },
-  { href: '/calendar', label: 'Plans',    Icon: CalendarIcon },
+  { href: '/calendar', label: 'Calendar', Icon: CalendarIcon },
   { href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon },
   { href: '/me',       label: 'Me',       Icon: UserIcon },
 ]
