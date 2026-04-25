@@ -488,7 +488,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       <header className="mt-3 mb-5">
         <div className="flex items-start gap-3">
-          <IconTile icon={category.icon} tint={category.tint} size={64} rounded="lg" />
+          <IconTile Icon={category.Icon} tint={category.tint} size={64} rounded="lg" />
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-2">
               <StatusChip

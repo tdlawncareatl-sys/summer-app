@@ -3,13 +3,13 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { AppIcon, type AppIconName, PlusIcon } from './icons'
+import { HomeIcon, CalendarIcon, LightbulbIcon, UserIcon, PlusIcon } from './icons'
 
-const ITEMS: { href: string; label: string; icon: AppIconName }[] = [
-  { href: '/', label: 'Home', icon: 'home' },
-  { href: '/calendar', label: 'Calendar', icon: 'calendar' },
-  { href: '/ideas', label: 'Ideas', icon: 'lightbulb' },
-  { href: '/me', label: 'Me', icon: 'user' },
+const ITEMS: { href: string; label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }> }[] = [
+  { href: '/',         label: 'Home',     Icon: HomeIcon },
+  { href: '/calendar', label: 'Calendar', Icon: CalendarIcon },
+  { href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon },
+  { href: '/me',       label: 'Me',       Icon: UserIcon },
 ]
 
 export default function BottomNav() {
@@ -94,10 +94,10 @@ export default function BottomNav() {
 }
 
 function NavItem({
-  href, label, icon, active,
+  href, label, Icon, active,
 }: {
   href: string; label: string; active: boolean;
-  icon: AppIconName;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>;
 }) {
   return (
     <Link
@@ -106,7 +106,7 @@ function NavItem({
         active ? 'text-olive' : 'text-ink-mute hover:text-ink'
       }`}
     >
-      <AppIcon name={icon} size={22} />
+      <Icon size={22} />
       <span>{label}</span>
     </Link>
   )

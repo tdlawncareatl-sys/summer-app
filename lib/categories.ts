@@ -1,7 +1,24 @@
-// Semantic event / idea icon matching. Titles stay free-text, and the app
-// resolves them to a consistent icon + tint pair through the shared icon registry.
+// Map event/idea titles → category icon + tint. Keeps the visual language
+// consistent (palm tree = beach, paddle = pickleball, etc.) without requiring
+// a category column in the DB.
 
-import type { AppIconName } from '@/app/components/icons'
+import {
+  PalmIcon,
+  ClapperIcon,
+  MountainIcon,
+  BootIcon,
+  PaddleIcon,
+  GameIcon,
+  FlagIcon,
+  PaddleBoatIcon,
+  PizzaIcon,
+  TentIcon,
+  DropletIcon,
+  PicnicIcon,
+  BowlIcon,
+  CalendarIcon,
+  LightbulbIcon,
+} from '@/app/components/icons'
 
 export type CategoryTint =
   | 'sage'
@@ -13,56 +30,44 @@ export type CategoryTint =
   | 'blush'
 
 export type Category = {
-  icon: AppIconName
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
   tint: CategoryTint
 }
 
+// Each entry: keyword → { icon, tint }. First match wins.
 const MATCHERS: { test: RegExp; category: Category }[] = [
-  { test: /\bbeach|surf|ocean|shore\b/i, category: { icon: 'beachDay', tint: 'sage' } },
-  { test: /\blake|boat|dock|marina|float|pontoon\b/i, category: { icon: 'lakePlankRaft', tint: 'teal' } },
-  { test: /\bkayak|kayaking|canoe|river|paddle.?board\b/i, category: { icon: 'kayaking', tint: 'teal' } },
-  { test: /\bpool|swim|water ?park\b/i, category: { icon: 'poolDay', tint: 'teal' } },
-  { test: /\bhik|trail|mountain|climb|boot\b/i, category: { icon: 'hiking', tint: 'olive' } },
-  { test: /\bcamp|tent|bonfire\b/i, category: { icon: 'camping', tint: 'terracotta' } },
-  { test: /\broad ?trip|drive\b/i, category: { icon: 'roadTrip', tint: 'sage' } },
-  { test: /\bmovie|film|cinema|drive in\b/i, category: { icon: 'movieNight', tint: 'lavender' } },
-  { test: /\bgame|video ?game|board ?game\b/i, category: { icon: 'gameNight', tint: 'olive' } },
-  { test: /\bgolf\b/i, category: { icon: 'golf', tint: 'sage' } },
-  { test: /\bpickleball|padel\b/i, category: { icon: 'pickleball', tint: 'olive' } },
-  { test: /\btennis\b/i, category: { icon: 'tennis', tint: 'olive' } },
-  { test: /\bvolleyball\b/i, category: { icon: 'volleyball', tint: 'teal' } },
-  { test: /\bbike|cycling\b/i, category: { icon: 'bikeRide', tint: 'sage' } },
-  { test: /\bfish|fishing\b/i, category: { icon: 'fishing', tint: 'teal' } },
-  { test: /\bsurf|surfing\b/i, category: { icon: 'surfing', tint: 'teal' } },
-  { test: /\bbbq|barbecue|cookout|grill\b/i, category: { icon: 'bbq', tint: 'terracotta' } },
-  { test: /\bpizza|dinner|drinks|sushi|food|eat|ramen|bowl\b/i, category: { icon: 'pizzaAndDrinks', tint: 'terracotta' } },
-  { test: /\bpicnic\b/i, category: { icon: 'picnic', tint: 'amber' } },
-  { test: /\bcoffee\b/i, category: { icon: 'coffeeDate', tint: 'amber' } },
-  { test: /\bice ?cream\b/i, category: { icon: 'iceCream', tint: 'amber' } },
-  { test: /\bfarmers? market|market\b/i, category: { icon: 'farmersMarket', tint: 'sage' } },
-  { test: /\bsunset\b/i, category: { icon: 'sunsetWatch', tint: 'amber' } },
-  { test: /\bstar|stargaz|moon\b/i, category: { icon: 'stargazing', tint: 'lavender' } },
-  { test: /\bconcert|music\b/i, category: { icon: 'concert', tint: 'lavender' } },
-  { test: /\bmuseum|gallery\b/i, category: { icon: 'museums', tint: 'olive' } },
-  { test: /\bidea|suggest\b/i, category: { icon: 'lightbulb', tint: 'amber' } },
+  { test: /\bbeach|surf|ocean\b/i,             category: { Icon: PalmIcon,       tint: 'sage' } },
+  { test: /\bmovie|film|cinema\b/i,            category: { Icon: ClapperIcon,    tint: 'lavender' } },
+  { test: /\bhik|hike|mountain|climb|trail\b/i,category: { Icon: MountainIcon,   tint: 'teal' } },
+  { test: /\bcamp|tent\b/i,                    category: { Icon: TentIcon,       tint: 'terracotta' } },
+  { test: /\blake|kayak|paddle.?board|swim|river|boat\b/i, category: { Icon: PaddleBoatIcon, tint: 'teal' } },
+  { test: /\bpickleball|tennis|padel\b/i,      category: { Icon: PaddleIcon,     tint: 'olive' } },
+  { test: /\bgolf\b/i,                         category: { Icon: FlagIcon,       tint: 'sage' } },
+  { test: /\bgame|video ?game\b/i,             category: { Icon: GameIcon,       tint: 'olive' } },
+  { test: /\bpizza|dinner|sushi|bbq|food|eat\b/i, category: { Icon: PizzaIcon,   tint: 'terracotta' } },
+  { test: /\bboots?|walk\b/i,                  category: { Icon: BootIcon,       tint: 'olive' } },
+  { test: /\bwater|rain\b/i,                   category: { Icon: DropletIcon,    tint: 'teal' } },
+  { test: /\bpicnic\b/i,                       category: { Icon: PicnicIcon,     tint: 'sage' } },
+  { test: /\bsushi|bowl|ramen\b/i,             category: { Icon: BowlIcon,       tint: 'amber' } },
+  { test: /\bidea|suggest\b/i,                 category: { Icon: LightbulbIcon,  tint: 'amber' } },
 ]
 
-const DEFAULT_CATEGORY: Category = { icon: 'calendar', tint: 'olive' }
+// Fallback for anything that doesn't match.
+const DEFAULT_CATEGORY: Category = { Icon: CalendarIcon, tint: 'olive' }
 
 export function categoryFor(title: string | null | undefined): Category {
   if (!title) return DEFAULT_CATEGORY
-  for (const matcher of MATCHERS) {
-    if (matcher.test.test(title)) return matcher.category
-  }
+  for (const m of MATCHERS) if (m.test.test(title)) return m.category
   return DEFAULT_CATEGORY
 }
 
+// Map tint → Tailwind bg/text class pairs. Keeps tint styling centralized.
 export const TINT_CLASSES: Record<CategoryTint, { bg: string; text: string }> = {
-  sage: { bg: 'bg-sage-tint', text: 'text-sage' },
-  olive: { bg: 'bg-olive-tint', text: 'text-olive' },
+  sage:       { bg: 'bg-sage-tint',       text: 'text-sage' },
+  olive:      { bg: 'bg-olive-tint',      text: 'text-olive' },
   terracotta: { bg: 'bg-terracotta-tint', text: 'text-terracotta' },
-  teal: { bg: 'bg-teal-tint', text: 'text-teal' },
-  lavender: { bg: 'bg-lavender-tint', text: 'text-lavender' },
-  amber: { bg: 'bg-amber-tint', text: 'text-amber' },
-  blush: { bg: 'bg-blush-tint', text: 'text-blush' },
+  teal:       { bg: 'bg-teal-tint',       text: 'text-teal' },
+  lavender:   { bg: 'bg-lavender-tint',   text: 'text-lavender' },
+  amber:      { bg: 'bg-amber-tint',      text: 'text-amber' },
+  blush:      { bg: 'bg-blush-tint',      text: 'text-blush' },
 }
