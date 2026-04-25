@@ -18,7 +18,7 @@ export default function Card({
     <As
       onClick={onClick}
       className={[
-        'bg-cream rounded-[var(--radius-lg)] shadow-[var(--shadow-soft)]',
+        'rounded-[var(--radius-lg)] border border-stone/65 bg-cream shadow-[var(--shadow-soft)]',
         padded ? 'p-4' : '',
         onClick ? 'text-left active:scale-[0.99] transition-transform' : '',
         className,

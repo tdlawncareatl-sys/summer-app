@@ -13,7 +13,7 @@ export default function StatusChip({
     size === 'md' ? 'text-xs px-3 py-1.5' :
     'text-xs px-2.5 py-1'
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${s.tint} ${s.text} ${sizeClass}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-[12px] font-semibold ${s.tint} ${s.text} ${sizeClass}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>

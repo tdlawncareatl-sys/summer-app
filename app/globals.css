@@ -8,16 +8,16 @@
 
 :root {
   /* Surfaces */
-  --color-sand:      #F7F3EC;  /* page bg — warm off-white */
-  --color-cream:     #FFFBF3;  /* raised cards */
-  --color-stone:     #EFE8DC;  /* alt card / pressed */
-  --color-sand-alt:  #F1EBDF;  /* subtle stripe */
+  --color-sand:      #FCFAF6;  /* page bg — brighter off-white */
+  --color-cream:     #FFFDFC;  /* raised cards */
+  --color-stone:     #EAE2D5;  /* alt card / pressed */
+  --color-sand-alt:  #F5EEE4;  /* subtle stripe */
 
   /* Text */
   --color-ink:       #2A2923;  /* primary text — warm charcoal */
-  --color-ink-soft:  #6B6A61;  /* secondary text */
-  --color-ink-mute:  #A6A399;  /* tertiary / metadata */
-  --color-ink-faint: #CFCAC0;  /* hints, dots, very-low */
+  --color-ink-soft:  #656359;  /* secondary text */
+  --color-ink-mute:  #A39D90;  /* tertiary / metadata */
+  --color-ink-faint: #D3CDC2;  /* hints, dots, very-low */
 
   /* Accents — status-driven */
   --color-olive:        #6B7F3F;  /* primary / confirmed */
@@ -49,15 +49,15 @@
   --color-sage-tint:    #E8EEE3;
 
   /* Radii */
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
   --radius-pill: 999px;
 
-  /* Shadow — very soft, warm */
-  --shadow-soft: 0 1px 2px rgba(42, 41, 35, 0.04), 0 4px 14px rgba(42, 41, 35, 0.05);
-  --shadow-raised: 0 2px 6px rgba(42, 41, 35, 0.06), 0 10px 30px rgba(42, 41, 35, 0.08);
+  /* Shadow — lighter and cleaner */
+  --shadow-soft: 0 1px 2px rgba(42, 41, 35, 0.03), 0 6px 18px rgba(42, 41, 35, 0.04);
+  --shadow-raised: 0 2px 8px rgba(42, 41, 35, 0.05), 0 14px 36px rgba(42, 41, 35, 0.06);
 }
 
 /* Expose tokens to Tailwind so `bg-sand`, `text-ink-soft`, `bg-olive`, etc. work. */
@@ -103,10 +103,10 @@
   --font-sans: var(--font-geist-sans);
   --font-serif: var(--font-serif), Georgia, "Times New Roman", serif;
 
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
 
   --shadow-soft: var(--shadow-soft);
   --shadow-raised: var(--shadow-raised);

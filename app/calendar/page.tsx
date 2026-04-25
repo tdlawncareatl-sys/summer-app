@@ -92,7 +92,7 @@ export default function CalendarPage() {
           <div className="flex justify-end">
             <Link
               href="/events"
-              className="inline-flex items-center gap-2 rounded-full bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-[18px] bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
             >
               <PlusIcon size={16} />
               New Event
@@ -101,12 +101,12 @@ export default function CalendarPage() {
         )}
       />
 
-      <Card className="border border-stone/70 p-4">
+      <Card className="p-4">
         <div className="flex items-center justify-between gap-3">
           <ViewTabs value={viewMode} onChange={setViewMode} />
           <button
             onClick={() => setFiltersOpen((current) => !current)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-sand px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-stone"
+            className="inline-flex items-center gap-1.5 rounded-[16px] bg-sand px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-stone"
           >
             Filters
             <ChevronDownIcon size={14} className={filtersOpen ? 'rotate-180' : ''} />
@@ -142,7 +142,7 @@ export default function CalendarPage() {
                 if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, -1))
                 if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, -7))
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sand text-ink-soft transition-colors hover:bg-stone"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] bg-sand text-ink-soft transition-colors hover:bg-stone"
               aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
             >
               <ChevronLeftIcon size={18} />
@@ -155,7 +155,7 @@ export default function CalendarPage() {
                 if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, 1))
                 if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, 7))
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sand text-ink-soft transition-colors hover:bg-stone"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] bg-sand text-ink-soft transition-colors hover:bg-stone"
               aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
             >
               <ChevronRightIcon size={18} />
@@ -188,7 +188,7 @@ export default function CalendarPage() {
       <section className="mt-7">
         <SectionHeader title="Upcoming Events" href="/events" linkLabel="See all" />
         {upcomingEvents.length === 0 ? (
-          <Card className="border border-stone/70 py-6">
+          <Card className="py-6">
             <p className="text-sm text-ink-soft">
               No filtered events match right now. Try a different filter or create a new event.
             </p>
@@ -204,7 +204,7 @@ export default function CalendarPage() {
 
       <section className="mt-7 mb-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">This Week</h2>
+          <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">This Week</h2>
           <button
             onClick={() => setViewMode('week')}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
@@ -234,13 +234,13 @@ function ViewTabs({
   onChange: (view: ViewMode) => void
 }) {
   return (
-    <div className="inline-flex rounded-full bg-sand p-1">
+    <div className="inline-flex rounded-[18px] border border-stone/70 bg-sand p-1">
       {(['month', 'week', 'list'] as ViewMode[]).map((view) => (
         <button
           key={view}
           onClick={() => onChange(view)}
           className={[
-            'rounded-full px-3 py-1.5 text-sm font-semibold transition-colors',
+            'rounded-[14px] px-3.5 py-1.5 text-sm font-semibold transition-colors',
             value === view ? 'bg-cream text-ink shadow-[var(--shadow-soft)]' : 'text-ink-soft',
           ].join(' ')}
         >
@@ -265,7 +265,7 @@ function FilterChip({
     <button
       onClick={onClick}
       className={[
-        'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors',
+        'inline-flex items-center gap-2 rounded-[14px] px-3 py-2 text-sm font-semibold transition-colors',
         active ? `${token.tint} ${token.text}` : 'bg-sand text-ink-soft',
       ].join(' ')}
     >
@@ -316,14 +316,14 @@ function MonthView({
             <div
               key={cell.iso}
               className={[
-                'aspect-square rounded-2xl px-1.5 py-1.5',
+                'aspect-square rounded-[18px] px-1.5 py-1.5',
                 cell.currentMonth ? 'bg-sand-alt' : 'bg-sand/70',
               ].join(' ')}
             >
               <div className="flex h-full flex-col items-center justify-between">
                 <span
                   className={[
-                    'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                    'inline-flex h-8 w-8 items-center justify-center rounded-[14px] text-sm font-semibold',
                     primary ? `${STATUS[primary].tint} ${STATUS[primary].text}` : '',
                     !cell.currentMonth ? 'text-ink-mute' : primary ? '' : 'text-ink',
                     isToday ? 'ring-1 ring-olive' : '',
@@ -355,7 +355,7 @@ function WeekView({
     <div className="overflow-x-auto scrollbar-hidden">
       <div className="grid min-w-[560px] grid-cols-7 gap-2">
         {days.map(({ date, events }) => (
-          <Card key={date} className="border border-stone/70 p-3">
+          <Card key={date} className="p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">
               {formatWeekday(date)}
             </p>
@@ -368,7 +368,7 @@ function WeekView({
                   <Link
                     key={event.id}
                     href={`/events/${event.id}`}
-                    className={`rounded-2xl px-2.5 py-2 text-xs font-medium ${STATUS[event.displayStatus].tint} ${STATUS[event.displayStatus].text}`}
+                    className={`rounded-[14px] px-2.5 py-2 text-xs font-medium ${STATUS[event.displayStatus].tint} ${STATUS[event.displayStatus].text}`}
                   >
                     <p className="line-clamp-2">{event.title}</p>
                   </Link>
@@ -385,7 +385,7 @@ function WeekView({
 function ListView({ events }: { events: EnrichedEvent[] }) {
   if (events.length === 0) {
     return (
-      <Card className="border border-stone/70 py-6">
+      <Card className="py-6">
         <p className="text-sm text-ink-soft">Nothing upcoming with the current filters.</p>
       </Card>
     )
@@ -404,7 +404,7 @@ function EventRow({ event }: { event: EnrichedEvent }) {
   const category = categoryFor(event.title)
   return (
     <Link href={`/events/${event.id}`}>
-      <Card className="overflow-hidden border border-stone/70 p-0">
+      <Card className="overflow-hidden p-0">
         <div className="flex">
           <span className={`w-1.5 shrink-0 ${STATUS[event.displayStatus].dot}`} />
           <div className="flex flex-1 items-center gap-3 px-3 py-3">
@@ -439,7 +439,7 @@ function WeekStripCard({
   event?: EnrichedEvent
 }) {
   return (
-    <Card className="min-w-[104px] border border-stone/70 p-3">
+    <Card className="min-w-[104px] p-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">
         {formatWeekday(date)}
       </p>
@@ -470,7 +470,7 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="font-sans text-[30px] font-bold tracking-tight text-ink">{title}</h2>
+      <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">{title}</h2>
       <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
         {linkLabel}
         <ChevronRightIcon size={14} />

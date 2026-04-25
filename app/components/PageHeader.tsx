@@ -36,7 +36,7 @@ export default function PageHeader({
   const greet = useMemo(() => greetingFor(new Date()), [])
 
   return (
-    <header className="pt-5 pb-4">
+    <header className="pt-6 pb-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {variant === 'greeting' ? (
@@ -45,16 +45,16 @@ export default function PageHeader({
                 <span className="text-amber"><SunIcon size={18} /></span>
                 <span className="text-sm font-medium">
                   {greet}{name ? ',' : ''}
-                  {name && <span className="text-olive font-semibold"> {name}</span>}
+                  {name && <span className="font-semibold text-ink"> {name}</span>}
                 </span>
               </div>
-              <h1 className="font-serif text-[40px] leading-[1.05] font-black text-ink mt-1 tracking-tight">
+              <h1 className="mt-1 font-serif text-[38px] leading-[1.05] font-black tracking-tight text-ink">
                 Summer Plans
               </h1>
             </>
           ) : (
             <>
-              <h1 className="font-serif text-[40px] leading-[1.05] font-black text-ink tracking-tight">
+              <h1 className="font-serif text-[38px] leading-[1.05] font-black tracking-tight text-ink">
                 {title}
               </h1>
               {subtitle && (

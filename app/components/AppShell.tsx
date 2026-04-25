@@ -44,10 +44,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen px-5 py-10">
-        <div className="max-w-md mx-auto animate-pulse">
+      <div className="max-w-md mx-auto animate-pulse">
           <div className="h-5 w-24 rounded-full bg-stone" />
-          <div className="mt-3 h-12 w-52 rounded-2xl bg-stone" />
-          <div className="mt-8 h-72 rounded-[28px] bg-cream" />
+          <div className="mt-3 h-12 w-52 rounded-[16px] bg-stone" />
+          <div className="mt-8 h-72 rounded-[24px] bg-cream" />
         </div>
       </div>
     )
@@ -67,7 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
-          <div className="rounded-[28px] bg-cream p-5 shadow-[var(--shadow-raised)]">
+          <div className="rounded-[24px] border border-stone/70 bg-cream p-5 shadow-[var(--shadow-raised)]">
             <label className="block text-xs font-bold uppercase tracking-[0.18em] text-ink-mute">
               Email
             </label>
@@ -77,12 +77,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
-              className="mt-2 w-full rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+              className="mt-2 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
             />
             <button
               onClick={handleEmailSignIn}
               disabled={!email.trim() || submitting}
-              className="mt-3 w-full rounded-2xl bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+              className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
             >
               {submitting ? 'Sending link…' : 'Send sign-in link'}
             </button>
@@ -90,12 +90,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               Open the link from your email on this device to finish signing in.
             </p>
             {authMessage && (
-              <p className="mt-3 rounded-2xl bg-olive-soft px-3 py-2 text-xs font-medium text-olive">
+              <p className="mt-3 rounded-[16px] bg-olive-soft px-3 py-2 text-xs font-medium text-olive">
                 {authMessage}
               </p>
             )}
             {authError && (
-              <p className="mt-3 rounded-2xl bg-blush-soft px-3 py-2 text-xs font-medium text-blush">
+              <p className="mt-3 rounded-[16px] bg-blush-soft px-3 py-2 text-xs font-medium text-blush">
                 {authError}
               </p>
             )}
@@ -108,7 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pendingProfile || !profile) {
     return (
       <main className="min-h-screen px-5 py-8 flex items-center">
-        <div className="max-w-md mx-auto w-full rounded-[28px] bg-cream p-5 shadow-[var(--shadow-raised)]">
+        <div className="max-w-md mx-auto w-full rounded-[24px] border border-stone/70 bg-cream p-5 shadow-[var(--shadow-raised)]">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-mute">One quick step</p>
           <h1 className="mt-2 font-serif text-[34px] leading-[1.05] font-black tracking-tight text-ink">
             What name should we use here?
@@ -125,17 +125,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             onChange={(event) => setDisplayName(event.target.value)}
             placeholder="Tad"
             autoFocus
-            className="mt-4 w-full rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+            className="mt-4 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
           />
           <button
             onClick={handleProfileSave}
             disabled={!displayName.trim() || submitting}
-            className="mt-3 w-full rounded-2xl bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+            className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
           >
             {submitting ? 'Saving…' : 'Finish setup'}
           </button>
           {authError && (
-            <p className="mt-3 rounded-2xl bg-blush-soft px-3 py-2 text-xs font-medium text-blush">
+            <p className="mt-3 rounded-[16px] bg-blush-soft px-3 py-2 text-xs font-medium text-blush">
               {authError}
             </p>
           )}

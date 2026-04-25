@@ -104,7 +104,7 @@ export default function NotificationsBell() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="relative text-ink hover:text-olive transition-colors"
+        className="relative text-ink transition-colors hover:text-olive"
         aria-label="Notifications"
       >
         <BellIcon size={22} />
@@ -123,7 +123,7 @@ export default function NotificationsBell() {
             onClick={() => setOpen(false)}
           />
 
-          <section className="absolute right-4 top-4 w-[min(24rem,calc(100vw-2rem))] rounded-[28px] bg-cream shadow-[var(--shadow-raised)] overflow-hidden">
+          <section className="absolute right-4 top-4 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-[24px] border border-stone/70 bg-cream shadow-[var(--shadow-raised)]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-sand-alt">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-mute">Notifications</p>
@@ -149,9 +149,9 @@ export default function NotificationsBell() {
 
               {!error && loading && (
                 <div className="px-5 py-4 flex flex-col gap-3 animate-pulse">
-                  <div className="h-16 rounded-2xl bg-sand" />
-                  <div className="h-16 rounded-2xl bg-sand" />
-                  <div className="h-16 rounded-2xl bg-sand" />
+                  <div className="h-16 rounded-[16px] bg-sand" />
+                  <div className="h-16 rounded-[16px] bg-sand" />
+                  <div className="h-16 rounded-[16px] bg-sand" />
                 </div>
               )}
 
@@ -173,9 +173,9 @@ export default function NotificationsBell() {
                         key={item.id}
                         href={item.href}
                         onClick={() => setOpen(false)}
-                        className="rounded-2xl p-3 flex gap-3 hover:bg-sand transition-colors"
+                        className="flex gap-3 rounded-[16px] p-3 transition-colors hover:bg-sand"
                       >
-                        <span className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${tone.icon}`}>
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
                           <Icon size={18} />
                         </span>
                         <span className="flex-1 min-w-0">

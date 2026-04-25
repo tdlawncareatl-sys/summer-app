@@ -254,7 +254,7 @@ export default function IdeasPage() {
           <div className="flex justify-end">
             <button
               onClick={revealForm}
-              className="inline-flex items-center gap-2 rounded-full bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-[18px] bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
             >
               <PlusIcon size={16} />
               Add Idea
@@ -273,7 +273,7 @@ export default function IdeasPage() {
       {name && (
         <div ref={formRef} className="mt-4">
           {showForm ? (
-            <Card className="border border-stone/70 p-4">
+            <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">Add an idea</p>
@@ -303,19 +303,19 @@ export default function IdeasPage() {
                 }}
                 placeholder="Pickleball Saturday"
                 autoFocus
-                className="mt-4 w-full rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                className="mt-4 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={3}
                 placeholder="Any details to help the group picture it?"
-                className="mt-3 w-full resize-none rounded-2xl border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                className="mt-3 w-full resize-none rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
               <button
                 onClick={() => void submitIdea()}
                 disabled={!title.trim() || submitting}
-                className="mt-3 w-full rounded-2xl bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+                className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
               >
                 {submitting ? 'Saving idea…' : 'Add idea'}
               </button>
@@ -331,7 +331,7 @@ export default function IdeasPage() {
           <section ref={activeRef} className="mt-6">
             <div className="mb-3 flex items-end justify-between gap-3">
               <div>
-                <h2 className="font-sans text-[30px] font-bold tracking-tight text-ink">Active Ideas</h2>
+                <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">Active Ideas</h2>
                 <p className="mt-1 text-sm text-ink-soft">Vote on ideas to help decide what to plan next.</p>
               </div>
               <label className="flex items-center gap-1 text-sm font-medium text-ink-soft">
@@ -351,7 +351,7 @@ export default function IdeasPage() {
             </div>
 
             {activeIdeas.length === 0 ? (
-              <Card className="border border-stone/70 py-8 text-center">
+              <Card className="py-8 text-center">
                 <p className="font-semibold text-ink">No active ideas yet</p>
                 <p className="mt-1 text-sm text-ink-soft">Start one and give the group something to vote around.</p>
               </Card>
@@ -389,7 +389,7 @@ export default function IdeasPage() {
             <section ref={backlogRef} className="mt-7">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
-                  <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">Saved Ideas (backlog)</h2>
+                  <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">Saved Ideas (backlog)</h2>
                   <p className="mt-1 text-sm text-ink-soft">Ideas to keep around for later.</p>
                 </div>
                 <LinkishButton label="See all" onClick={() => setShowAllActive(true)} />
@@ -406,7 +406,7 @@ export default function IdeasPage() {
             <section ref={plansRef} className="mt-7 mb-4">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
-                  <h2 className="font-sans text-[24px] font-bold tracking-tight text-ink">Recently Turned Into Plans</h2>
+                  <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">Recently Turned Into Plans</h2>
                   <p className="mt-1 text-sm text-ink-soft">Ideas that already made it onto the calendar.</p>
                 </div>
                 <LinkishButton label="See all" href="/events" />
@@ -447,7 +447,7 @@ function ActionRail({
   onLearnMore: () => void
 }) {
   return (
-    <Card className="border border-stone/70 p-0 overflow-hidden">
+    <Card className="overflow-hidden p-0">
       <div className="grid grid-cols-4 divide-x divide-stone/60">
         <ActionRailItem
           tint="sage"
@@ -533,13 +533,13 @@ function IdeaRow({
   const category = categoryFor(idea.title)
 
   return (
-    <Card className="border border-stone/70 p-3.5">
+    <Card className="p-3.5">
       <div className="flex items-start gap-3">
         <IconTile Icon={category.Icon} tint={category.tint} size={68} rounded="full" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="text-[22px] font-bold leading-tight text-ink">{idea.title}</h3>
+              <h3 className="text-[20px] font-bold leading-tight text-ink">{idea.title}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
                 <span className="inline-flex items-center gap-1">
                   <UsersIcon size={12} />
@@ -555,7 +555,7 @@ function IdeaRow({
               <button
                 onClick={onDelete}
                 disabled={deleting}
-                className="rounded-full p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
+                className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
                 aria-label="Delete idea"
               >
                 <XIcon size={14} />
@@ -604,7 +604,7 @@ function IdeaRow({
             <button
               onClick={onPlan}
               disabled={planning}
-              className="ml-auto inline-flex items-center gap-2 rounded-full bg-olive px-4 py-2 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
+              className="ml-auto inline-flex items-center gap-2 rounded-[16px] bg-olive px-4 py-2 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
             >
               {planning ? 'Planning…' : 'Plan Event'}
             </button>
@@ -640,7 +640,7 @@ function PreferenceButton({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40',
+        'inline-flex items-center gap-2 rounded-[14px] px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40',
         active ? activeClass : 'bg-sand text-ink-soft hover:bg-stone',
       ].join(' ')}
     >
@@ -653,7 +653,7 @@ function PreferenceButton({
 function BacklogCard({ idea }: { idea: Idea }) {
   const category = categoryFor(idea.title)
   return (
-    <Card className="min-w-[152px] border border-stone/70 p-3">
+    <Card className="min-w-[152px] p-3">
       <div className="flex items-center gap-2.5">
         <IconTile Icon={category.Icon} tint={category.tint} size={36} rounded="full" iconSize={18} />
         <div className="min-w-0">
@@ -699,7 +699,7 @@ function LinkCard({
 }) {
   return (
     <Link href={href} className="block">
-      <Card className="border border-stone/70 p-3.5 transition-transform active:scale-[0.99]">
+      <Card className="p-3.5 transition-transform active:scale-[0.99]">
         {children}
       </Card>
     </Link>

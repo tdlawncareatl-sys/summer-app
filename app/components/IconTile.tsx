@@ -19,8 +19,8 @@ export default function IconTile({
   const t = TINT_CLASSES[tint]
   const radius =
     rounded === 'full' ? 'rounded-full' :
-    rounded === 'lg'   ? 'rounded-[18px]' :
-    'rounded-[14px]'
+    rounded === 'lg'   ? 'rounded-[16px]' :
+    'rounded-[12px]'
   return (
     <div
       className={`${t.bg} ${t.text} ${radius} flex items-center justify-center shrink-0`}

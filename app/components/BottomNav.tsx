@@ -26,8 +26,8 @@ export default function BottomNav() {
     <>
       <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
         <div className="max-w-md mx-auto px-4 pb-4 pointer-events-auto">
-          <div className="relative bg-cream rounded-[28px] shadow-[var(--shadow-raised)] border border-stone/60">
-            <div className="grid grid-cols-5 items-end h-16 px-2">
+          <div className="relative rounded-[24px] border border-stone/70 bg-cream shadow-[var(--shadow-raised)]">
+            <div className="grid h-16 grid-cols-5 items-end px-2.5">
               {ITEMS.slice(0, 2).map((item) => (
                 <NavItem key={item.href} {...item} active={isActive(item.href)} />
               ))}
@@ -36,7 +36,7 @@ export default function BottomNav() {
               <div className="flex justify-center -mt-5">
                 <button
                   onClick={() => setSheetOpen(true)}
-                  className="w-14 h-14 rounded-full bg-olive text-white shadow-[var(--shadow-raised)] flex items-center justify-center active:scale-95 transition-transform"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-olive text-white shadow-[var(--shadow-raised)] transition-transform active:scale-95"
                   aria-label="Create"
                 >
                   <PlusIcon size={22} />
@@ -56,7 +56,7 @@ export default function BottomNav() {
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setSheetOpen(false)}>
           <div className="absolute inset-0 bg-ink/30 backdrop-blur-sm" />
           <div
-            className="relative w-full max-w-md bg-cream rounded-t-[28px] p-6 shadow-[var(--shadow-raised)]"
+            className="relative w-full max-w-md rounded-t-[24px] border border-stone/70 bg-cream p-6 shadow-[var(--shadow-raised)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-stone rounded-full mx-auto mb-5" />
@@ -70,9 +70,9 @@ export default function BottomNav() {
                 <button
                   key={a.label}
                   onClick={() => { setSheetOpen(false); router.push(a.href) }}
-                  className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-sand text-left active:scale-[0.99] transition"
+                  className="flex items-center gap-3 rounded-[16px] bg-sand px-4 py-3 text-left transition active:scale-[0.99]"
                 >
-                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${a.tint}`}><PlusIcon size={16} /></span>
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-[14px] ${a.tint}`}><PlusIcon size={16} /></span>
                   <span>
                     <span className="block font-semibold text-ink">{a.label}</span>
                     <span className="block text-xs text-ink-soft">{a.sub}</span>

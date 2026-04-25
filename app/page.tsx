@@ -21,7 +21,6 @@ type FeatureCard = {
   href: string
   title: string
   description: string
-  eyebrow: string
   tint: CategoryTint
   Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
 }
@@ -73,24 +72,21 @@ export default function Home() {
     {
       href: '/availability',
       title: 'Availability',
-      description: 'Mark blackout dates and keep the group visible.',
-      eyebrow: data ? `${countBlockedThisWeek(data)} blocked this week` : 'Keep the crew aligned',
+      description: 'Mark blackout dates and see the group.',
       tint: 'sage',
       Icon: CalendarIcon,
     },
     {
       href: '/events',
       title: 'Event Voting',
-      description: 'Vote on dates and get plans across the line.',
-      eyebrow: data ? `${votingEvents.length} event${votingEvents.length === 1 ? '' : 's'} need input` : 'Help decide next',
+      description: 'Vote on dates for upcoming events.',
       tint: 'terracotta',
       Icon: UsersIcon,
     },
     {
       href: '/ideas',
       title: 'Ideas Hub',
-      description: 'Capture ideas and turn the good ones into plans.',
-      eyebrow: data ? `${ideas.length} idea${ideas.length === 1 ? '' : 's'} in rotation` : 'Keep the momentum going',
+      description: 'Suggest and browse activity ideas.',
       tint: 'olive',
       Icon: LightbulbIcon,
     },
@@ -175,21 +171,19 @@ function FeatureRouteCard({
   href,
   title,
   description,
-  eyebrow,
   tint,
   Icon,
 }: FeatureCard) {
   return (
     <Link href={href}>
-      <Card className="h-full min-h-[188px] flex flex-col gap-4 border border-stone/70 p-3.5">
-        <IconTile Icon={Icon} tint={tint} size={60} rounded="lg" />
+      <Card className="flex h-full min-h-[180px] flex-col gap-4 p-4">
+        <IconTile Icon={Icon} tint={tint} size={58} rounded="lg" />
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-mute">{eyebrow}</p>
-          <h2 className="mt-2 text-[15px] font-bold leading-tight text-ink">{title}</h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-ink-soft">{description}</p>
+          <h2 className="text-[16px] font-bold leading-tight text-ink">{title}</h2>
+          <p className="mt-2 text-[13px] leading-5 text-ink-soft">{description}</p>
         </div>
         <div className="mt-auto flex justify-end">
-          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${strongTintCircle(tint)}`}>
+          <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${strongTintCircle(tint)}`}>
             <ArrowRightIcon size={16} />
           </span>
         </div>
@@ -205,14 +199,14 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
 
   return (
     <Link href={`/events/${event.id}`}>
-      <Card className="border border-stone/70 p-0 overflow-hidden">
+      <Card className="overflow-hidden p-0">
         <div className="flex items-center gap-4 px-4 py-4">
           <IconTile Icon={category.Icon} tint={category.tint} size={86} rounded="full" />
           <div className="min-w-0 flex-1">
             <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${statusAccent(event.displayStatus)}`}>
               {event.displayStatus === 'voting' ? 'Event Voting' : event.displayStatus === 'hosting' ? 'Hosting' : 'Upcoming Plan'}
             </p>
-            <h3 className="mt-1 font-serif text-[30px] leading-[1.02] font-black text-ink tracking-tight truncate">
+            <h3 className="mt-1 text-[18px] font-bold leading-tight tracking-tight text-ink sm:text-[22px]">
               {event.title}
             </h3>
             <p className="mt-1 text-sm text-ink-soft">
@@ -235,9 +229,9 @@ function UpcomingPlanCard({ event }: { event: EnrichedEvent }) {
   const category = categoryFor(event.title)
   return (
     <Link href={`/events/${event.id}`}>
-      <Card className="h-full border border-stone/70 p-3.5">
-        <IconTile Icon={category.Icon} tint={category.tint} size={74} rounded="full" />
-        <h3 className="mt-3 text-[15px] font-bold leading-tight text-ink">{event.title}</h3>
+      <Card className="h-full p-3.5">
+        <IconTile Icon={category.Icon} tint={category.tint} size={64} rounded="full" />
+        <h3 className="mt-3 text-[16px] font-bold leading-tight text-ink">{event.title}</h3>
         <p className="mt-1 text-xs text-ink-soft">
           {event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}
         </p>
@@ -260,7 +254,7 @@ function IdeaSuggestionCard({
   const category = categoryFor(title)
   return (
     <Link href="/ideas" className="min-w-[164px] max-w-[164px] shrink-0">
-      <Card className="h-full border border-stone/70 p-3">
+      <Card className="h-full p-3">
         <div className="flex items-center gap-2.5">
           <IconTile Icon={category.Icon} tint={category.tint} size={42} rounded="full" />
           <div className="min-w-0">
@@ -287,7 +281,7 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="font-sans text-[31px] font-bold tracking-tight text-ink">{title}</h2>
+      <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">{title}</h2>
       <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
         {linkLabel}
         <ChevronRightIcon size={14} />
@@ -298,12 +292,10 @@ function SectionHeader({
 
 function jumpBackInLabel(event: EnrichedEvent) {
   if (event.displayStatus === 'voting') {
-    return `${event.dateOptions.length} option${event.dateOptions.length === 1 ? '' : 's'} · ${event.voteCount} vote${event.voteCount === 1 ? '' : 's'}`
+    return 'Vote on dates'
   }
   if (event.displayStatus === 'hosting') {
-    return event.dateOptions.length > 0
-      ? `${event.dateOptions.length} date option${event.dateOptions.length === 1 ? '' : 's'} ready`
-      : 'Add dates and start the vote'
+    return event.dateOptions.length > 0 ? 'Keep the plan moving' : 'Add dates and start the vote'
   }
   return event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Keep planning'
 }
@@ -316,18 +308,6 @@ function relativeDateLabel(dateIso: string) {
   if (diff === 1) return 'Tomorrow'
   if (diff < 7) return `${diff}d out`
   return `${Math.ceil(diff / 7)}w out`
-}
-
-function countBlockedThisWeek(data: PlanData) {
-  const today = new Date()
-  let total = 0
-  for (let index = 0; index < 7; index += 1) {
-    const next = new Date(today)
-    next.setDate(next.getDate() + index)
-    const iso = next.toISOString().split('T')[0]
-    total += data.blackoutsByDate[iso]?.length ?? 0
-  }
-  return total
 }
 
 function strongTintCircle(tint: CategoryTint) {
