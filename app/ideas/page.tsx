@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import type { ComponentType } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -12,7 +13,7 @@ import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, LightbulbIcon, PlusIcon, StarIcon, UsersIcon, XIcon } from '../components/icons'
+import { type AppIconProps, CheckIcon, ChevronDownIcon, ChevronRightIcon, LightbulbIcon, PlusIcon, StarIcon, UsersIcon, XIcon } from '../components/icons'
 
 type Idea = {
   id: string
@@ -489,7 +490,7 @@ function ActionRailItem({
   description,
   onClick,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  Icon: ComponentType<AppIconProps>
   tint: CategoryTint
   title: string
   description: string
@@ -535,7 +536,7 @@ function IdeaRow({
   return (
     <Card className="p-3.5">
       <div className="flex items-start gap-3">
-        <IconTile Icon={category.Icon} tint={category.tint} size={68} rounded="full" />
+        <IconTile icon={category.icon} tint={category.tint} size={68} rounded="full" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -623,7 +624,7 @@ function PreferenceButton({
   disabled,
   onClick,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  Icon: ComponentType<AppIconProps>
   label: string
   tint: 'olive' | 'amber' | 'blush'
   active: boolean
@@ -655,7 +656,7 @@ function BacklogCard({ idea }: { idea: Idea }) {
   return (
     <Card className="min-w-[152px] p-3">
       <div className="flex items-center gap-2.5">
-        <IconTile Icon={category.Icon} tint={category.tint} size={36} rounded="full" iconSize={18} />
+        <IconTile icon={category.icon} tint={category.tint} size={36} rounded="full" iconSize={18} />
         <div className="min-w-0">
           <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{idea.title}</p>
           <p className="mt-1 text-[11px] text-ink-mute">{idea.likes} interested</p>
@@ -672,7 +673,7 @@ function TurnedPlanCard({ event }: { event: EventLite }) {
   return (
     <LinkCard href={`/events/${event.id}`}>
       <div className="flex items-center gap-3">
-        <IconTile Icon={category.Icon} tint={category.tint} size={48} rounded="lg" />
+        <IconTile icon={category.icon} tint={category.tint} size={48} rounded="lg" />
         <div className="min-w-0 flex-1">
           <p className="text-base font-semibold text-ink">{event.title}</p>
           <p className="mt-1 text-xs text-ink-soft">

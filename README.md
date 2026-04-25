@@ -18,6 +18,17 @@ npm run test:watch
 npm run test:e2e
 ```
 
+## Event Detail Schema
+
+The event pages now support richer logistics: location name, street address, Apple Maps links,
+meeting time, group notes, and parking / meetup notes.
+
+If those fields do not save in Supabase yet, run the idempotent SQL in:
+
+```bash
+supabase/migrations/20260425_add_event_details.sql
+```
+
 What each one does:
 
 - `npm run test` runs the fast Vitest suite for logic and component behavior.

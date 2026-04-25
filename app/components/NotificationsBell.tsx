@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { fetchNotifications, type NotificationItem, type NotificationTone } from '@/lib/notifications'
-import { BellIcon, CheckIcon, LightbulbIcon, StarIcon, CalendarIcon, XIcon } from './icons'
+import { AppIcon, BellIcon, type AppIconName, XIcon } from './icons'
 
 const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
   olive: {
@@ -23,11 +23,11 @@ const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
 
 const LAST_SEEN_PREFIX = 'summer-app-notifications-seen'
 
-function iconFor(item: NotificationItem) {
-  if (item.type === 'confirmed') return CheckIcon
-  if (item.type === 'idea') return LightbulbIcon
-  if (item.type === 'vote-needed') return CalendarIcon
-  return StarIcon
+function iconFor(item: NotificationItem): AppIconName {
+  if (item.type === 'confirmed') return 'confirmed'
+  if (item.type === 'idea') return 'lightbulb'
+  if (item.type === 'vote-needed') return 'calendar'
+  return 'completed'
 }
 
 function formatWhen(iso: string) {
@@ -166,7 +166,7 @@ export default function NotificationsBell() {
                 <div className="p-3 flex flex-col gap-2">
                   {items.map((item) => {
                     const unread = !lastSeenAt || item.timestamp > lastSeenAt
-                    const Icon = iconFor(item)
+                    const icon = iconFor(item)
                     const tone = TONE_STYLES[item.tone]
                     return (
                       <Link
@@ -176,7 +176,7 @@ export default function NotificationsBell() {
                         className="flex gap-3 rounded-[16px] p-3 transition-colors hover:bg-sand"
                       >
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
-                          <Icon size={18} />
+                          <AppIcon name={icon} size={18} />
                         </span>
                         <span className="flex-1 min-w-0">
                           <span className="flex items-start justify-between gap-2">

@@ -17,7 +17,7 @@ import Card from '../components/Card'
 import Avatar from '../components/Avatar'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
-import { ChevronRightIcon, CalendarIcon, LightbulbIcon } from '../components/icons'
+import { type AppIconName, ChevronRightIcon } from '../components/icons'
 
 export default function MePage() {
   const { authUser, signOut } = useAuth()
@@ -161,7 +161,7 @@ export default function MePage() {
               return (
                 <Link key={ev.id} href={`/events/${ev.id}`}>
                   <Card className="flex items-center gap-3">
-                    <IconTile Icon={cat.Icon} tint={cat.tint} size={44} />
+                    <IconTile icon={cat.icon} tint={cat.tint} size={44} />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-ink truncate">{ev.title}</p>
                       <p className="text-xs text-ink-soft mt-0.5">
@@ -187,7 +187,7 @@ export default function MePage() {
               const cat = categoryFor(idea.title)
               return (
                 <Card key={idea.id} className="flex items-center gap-3">
-                  <IconTile Icon={cat.Icon} tint={cat.tint} size={40} />
+                  <IconTile icon={cat.icon} tint={cat.tint} size={40} />
                   <p className="flex-1 font-semibold text-ink text-sm truncate">{idea.title}</p>
                   <span className="text-xs font-bold text-ink-soft">{idea.likes} ♥</span>
                 </Card>
@@ -201,9 +201,9 @@ export default function MePage() {
       <section className="mb-10">
         <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">Shortcuts</h2>
         <Card padded={false}>
-          <NavRow Icon={CalendarIcon} tint="olive" title="Mark availability" sub="Block out your no-go dates" href="/availability" />
+          <NavRow icon="calendar" tint="olive" title="Mark availability" sub="Block out your no-go dates" href="/availability" />
           <Divider />
-          <NavRow Icon={LightbulbIcon} tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
+          <NavRow icon="lightbulb" tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
         </Card>
         <button
           onClick={handleSignOut}
@@ -250,9 +250,9 @@ function StatBlock({
 }
 
 function NavRow({
-  Icon, tint, title, sub, href,
+  icon, tint, title, sub, href,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  icon: AppIconName
   tint: 'olive' | 'terracotta' | 'teal' | 'amber' | 'blush' | 'sage' | 'lavender'
   title: string
   sub: string
@@ -260,7 +260,7 @@ function NavRow({
 }) {
   return (
     <Link href={href} className="flex items-center gap-3 p-4 active:bg-sand-alt transition-colors">
-      <IconTile Icon={Icon} tint={tint} size={40} />
+      <IconTile icon={icon} tint={tint} size={40} />
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-ink">{title}</p>
         <p className="text-xs text-ink-soft">{sub}</p>

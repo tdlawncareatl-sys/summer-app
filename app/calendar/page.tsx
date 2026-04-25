@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
+import { compactEventDetails } from '@/lib/eventDetails'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import { STATUS, type EventStatus } from '@/lib/status'
 import PageHeader from '../components/PageHeader'
@@ -408,13 +409,16 @@ function EventRow({ event }: { event: EnrichedEvent }) {
         <div className="flex">
           <span className={`w-1.5 shrink-0 ${STATUS[event.displayStatus].dot}`} />
           <div className="flex flex-1 items-center gap-3 px-3 py-3">
-            <IconTile Icon={category.Icon} tint={category.tint} size={50} rounded="lg" />
+            <IconTile icon={category.icon} tint={category.tint} size={50} rounded="lg" />
             <div className="min-w-0 flex-1">
               <p className="text-base font-semibold text-ink">{event.title}</p>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-soft">
                 <CalendarIcon size={12} />
                 <span>{event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}</span>
               </div>
+              {compactEventDetails(event) ? (
+                <p className="mt-1 text-xs text-ink-mute">{compactEventDetails(event)}</p>
+              ) : null}
               <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-mute">
                 <UsersIcon size={12} />
                 <span>{event.participantNames.length} people in the loop</span>

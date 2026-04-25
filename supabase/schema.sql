@@ -12,6 +12,7 @@ create table if not exists availability (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade not null,
   date date not null,
+  category text,
   created_at timestamptz default now(),
   unique(user_id, date)
 );
@@ -21,8 +22,16 @@ create table if not exists events (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
-  created_by uuid references users(id) on delete set null,
+  created_by text,
   status text default 'planning' check (status in ('planning', 'confirmed', 'cancelled')),
+  confirmed_date date,
+  confirmed_end_date date,
+  location_name text,
+  location_address text,
+  location_notes text,
+  event_notes text,
+  start_time text,
+  end_time text,
   created_at timestamptz default now()
 );
 
@@ -31,7 +40,8 @@ create table if not exists date_options (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references events(id) on delete cascade not null,
   date date not null,
-  created_by uuid references users(id) on delete set null,
+  end_date date,
+  created_by text,
   created_at timestamptz default now()
 );
 
@@ -51,7 +61,7 @@ create table if not exists ideas (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   description text,
-  submitted_by uuid references users(id) on delete set null,
+  submitted_by text,
   likes int default 0,
   created_at timestamptz default now()
 );

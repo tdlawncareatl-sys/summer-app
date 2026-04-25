@@ -4,16 +4,16 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor, type CategoryTint } from '@/lib/categories'
+import { compactEventDetails } from '@/lib/eventDetails'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import PageHeader from './components/PageHeader'
 import Card from './components/Card'
 import IconTile from './components/IconTile'
 import { AvatarStack } from './components/Avatar'
 import {
+  type AppIconName,
   ArrowRightIcon,
-  CalendarIcon,
   ChevronRightIcon,
-  LightbulbIcon,
   UsersIcon,
 } from './components/icons'
 
@@ -22,7 +22,7 @@ type FeatureCard = {
   title: string
   description: string
   tint: CategoryTint
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  icon: AppIconName
 }
 
 export default function Home() {
@@ -74,21 +74,21 @@ export default function Home() {
       title: 'Availability',
       description: 'Mark blackout dates and see the group.',
       tint: 'sage',
-      Icon: CalendarIcon,
+      icon: 'calendar',
     },
     {
       href: '/events',
       title: 'Event Voting',
       description: 'Vote on dates for upcoming events.',
       tint: 'terracotta',
-      Icon: UsersIcon,
+      icon: 'people',
     },
     {
       href: '/ideas',
       title: 'Ideas Hub',
       description: 'Suggest and browse activity ideas.',
       tint: 'olive',
-      Icon: LightbulbIcon,
+      icon: 'lightbulb',
     },
   ]
 
@@ -172,12 +172,12 @@ function FeatureRouteCard({
   title,
   description,
   tint,
-  Icon,
+  icon,
 }: FeatureCard) {
   return (
     <Link href={href}>
       <Card className="flex h-full min-h-[180px] flex-col gap-4 p-4">
-        <IconTile Icon={Icon} tint={tint} size={58} rounded="lg" />
+        <IconTile icon={icon} tint={tint} size={58} rounded="lg" />
         <div className="min-w-0">
           <h2 className="text-[16px] font-bold leading-tight text-ink">{title}</h2>
           <p className="mt-2 text-[13px] leading-5 text-ink-soft">{description}</p>
@@ -201,7 +201,7 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
     <Link href={`/events/${event.id}`}>
       <Card className="overflow-hidden p-0">
         <div className="flex items-center gap-4 px-4 py-4">
-          <IconTile Icon={category.Icon} tint={category.tint} size={86} rounded="full" />
+          <IconTile icon={category.icon} tint={category.tint} size={86} rounded="full" />
           <div className="min-w-0 flex-1">
             <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${statusAccent(event.displayStatus)}`}>
               {event.displayStatus === 'voting' ? 'Event Voting' : event.displayStatus === 'hosting' ? 'Hosting' : 'Upcoming Plan'}
@@ -227,14 +227,18 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
 
 function UpcomingPlanCard({ event }: { event: EnrichedEvent }) {
   const category = categoryFor(event.title)
+  const detailSummary = compactEventDetails(event)
   return (
     <Link href={`/events/${event.id}`}>
       <Card className="h-full p-3.5">
-        <IconTile Icon={category.Icon} tint={category.tint} size={64} rounded="full" />
+        <IconTile icon={category.icon} tint={category.tint} size={64} rounded="full" />
         <h3 className="mt-3 text-[16px] font-bold leading-tight text-ink">{event.title}</h3>
         <p className="mt-1 text-xs text-ink-soft">
           {event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}
         </p>
+        {detailSummary ? (
+          <p className="mt-1 text-[11px] text-ink-mute line-clamp-2">{detailSummary}</p>
+        ) : null}
         <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-mute">
           <UsersIcon size={13} />
           <span>{event.participantNames.length}</span>
@@ -256,7 +260,7 @@ function IdeaSuggestionCard({
     <Link href="/ideas" className="min-w-[164px] max-w-[164px] shrink-0">
       <Card className="h-full p-3">
         <div className="flex items-center gap-2.5">
-          <IconTile Icon={category.Icon} tint={category.tint} size={42} rounded="full" />
+          <IconTile icon={category.icon} tint={category.tint} size={42} rounded="full" />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{title}</p>
             <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-mute">

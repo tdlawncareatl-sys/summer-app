@@ -2,11 +2,12 @@
 // Tile == big rounded surface, icon top-left, number + label.
 
 import Link from 'next/link'
+import type { ComponentType } from 'react'
 import IconTile from './IconTile'
 import { CategoryTint } from '@/lib/categories'
-import { ArrowRightIcon } from './icons'
+import { type AppIconProps, ArrowRightIcon } from './icons'
 
-type IconComp = React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+type IconComp = ComponentType<AppIconProps>
 
 export default function SummaryTile({
   Icon,

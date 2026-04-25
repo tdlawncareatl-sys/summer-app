@@ -10,7 +10,7 @@ import { useMemo } from 'react'
 import { useName } from '@/lib/useName'
 import Avatar from './Avatar'
 import NotificationsBell from './NotificationsBell'
-import { SunIcon } from './icons'
+import { AppIcon } from './icons'
 
 function greetingFor(d: Date) {
   const h = d.getHours()
@@ -42,7 +42,7 @@ export default function PageHeader({
           {variant === 'greeting' ? (
             <>
               <div className="flex items-center gap-2 text-ink-soft">
-                <span className="text-amber"><SunIcon size={18} /></span>
+                <AppIcon name="sun" size={18} palette="brand" />
                 <span className="text-sm font-medium">
                   {greet}{name ? ',' : ''}
                   {name && <span className="font-semibold text-ink"> {name}</span>}
