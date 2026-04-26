@@ -14,10 +14,10 @@ import { useName } from '@/lib/useName'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from '../components/icons'
+import { densityForDay } from '@/lib/availability'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_LABELS = ['S','M','T','W','T','F','S']
-const TOTAL_FRIENDS = 12
 
 function getRange(a: string, b: string): string[] {
   const start = new Date(a + 'T12:00:00')
@@ -83,6 +83,7 @@ export default function AvailabilityPage() {
   const [savingCategory, setSavingCategory] = useState(false)
 
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
+  const [totalUsers, setTotalUsers] = useState(0)
   const [groupLoading, setGroupLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
@@ -125,7 +126,8 @@ export default function AvailabilityPage() {
       supabase.from('users').select('id, name'),
       supabase.from('availability').select('user_id, date'),
     ])
-    const userMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
+    const userList = users ?? []
+    const userMap = Object.fromEntries(userList.map((u) => [u.id, u.name]))
     const result: GroupBlackouts = {}
     for (const row of avail ?? []) {
       const friendName = userMap[row.user_id]
@@ -133,6 +135,7 @@ export default function AvailabilityPage() {
       ;(result[row.date] ??= []).push(friendName)
     }
     setGroupBlackouts(result)
+    setTotalUsers(userList.length)
     setGroupLoading(false)
   }
 
@@ -248,11 +251,12 @@ export default function AvailabilityPage() {
 
   function groupCellTint(iso: string) {
     const blocked = groupBlackouts[iso]?.length ?? 0
-    if (blocked === 0) return 'bg-sand text-ink'
-    const ratio = blocked / TOTAL_FRIENDS
-    if (ratio < 0.25) return 'bg-amber-tint text-amber'
-    if (ratio < 0.5)  return 'bg-amber-soft text-amber'
-    return 'bg-blush-soft text-blush'
+    switch (densityForDay(blocked, totalUsers)) {
+      case 'few':  return 'bg-amber-tint text-amber'
+      case 'some': return 'bg-amber-soft text-amber'
+      case 'many': return 'bg-blush-soft text-blush'
+      default:     return 'bg-sand text-ink'
+    }
   }
 
   const selectedDateBlocked = selectedDate ? (groupBlackouts[selectedDate] ?? []) : []

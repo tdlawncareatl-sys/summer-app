@@ -158,7 +158,7 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
     ideas: (ideas ?? []) as RawIdea[],
     availability: (availability ?? []) as RawAvailability[],
     blackoutsByDate,
-    totalFriends: Math.max(userList.length, 12),
+    totalFriends: userList.length,
   }
 }
 

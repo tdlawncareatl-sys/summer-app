@@ -144,7 +144,7 @@ export default function MePage() {
           />
           <StatBlock
             tint="olive"
-            value={data?.totalFriends ?? 12}
+            value={data?.totalFriends ?? 0}
             label="in the crew"
             sub={<span className="text-ink-mute">Summer 2026</span>}
           />
