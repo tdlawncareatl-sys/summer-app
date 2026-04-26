@@ -1077,19 +1077,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <div className="flex items-center gap-3 border-t border-stone/40 px-3 py-2.5">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-mute">How many days?</span>
                 <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="Fewer days"
-                    disabled={savingLength || multiDayInput <= 2}
-                    onClick={() => {
-                      const next = Math.max(2, multiDayInput - 1)
-                      setMultiDayInput(next)
-                      if (lengthType >= 2) void saveLength(next)
-                    }}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-stone/60 bg-cream text-base font-bold text-ink-soft disabled:opacity-40"
-                  >
-                    −
-                  </button>
                   <input
                     type="number"
                     min={2}
@@ -1100,25 +1087,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       if (!Number.isFinite(raw)) return
                       const next = Math.min(30, Math.max(2, Math.round(raw)))
                       setMultiDayInput(next)
+                      if (lengthType >= 2 && next !== lengthType) void saveLength(next)
                     }}
                     onBlur={() => {
                       if (lengthType >= 2 && multiDayInput !== lengthType) void saveLength(multiDayInput)
                     }}
-                    className="w-14 rounded-lg border border-stone/60 bg-cream px-2 py-1.5 text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                    className="w-20 rounded-lg border border-stone/60 bg-cream px-2 py-1.5 text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-olive"
                   />
-                  <button
-                    type="button"
-                    aria-label="More days"
-                    disabled={savingLength || multiDayInput >= 30}
-                    onClick={() => {
-                      const next = Math.min(30, multiDayInput + 1)
-                      setMultiDayInput(next)
-                      if (lengthType >= 2) void saveLength(next)
-                    }}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-stone/60 bg-cream text-base font-bold text-ink-soft disabled:opacity-40"
-                  >
-                    +
-                  </button>
+                  <span className="text-xs text-ink-soft">days</span>
                 </div>
               </div>
             </div>
