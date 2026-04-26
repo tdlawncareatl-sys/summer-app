@@ -1,10 +1,9 @@
 'use client'
 
-// Event detail — the heart of the product. Voting still matters here, but a
-// real event page also needs logistics: where, when, and anything people need
-// to know before they show up.
+// Event detail — friendly hero up top, then the scheduling/voting tool below.
+// Availability scoring lives in lib/availability.ts; this page composes UI.
 
-import { useState, useEffect, use, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, use, type ReactNode } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
@@ -12,16 +11,32 @@ import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
 import {
   buildAppleMapsUrl,
-  compactEventDetails,
   eventDraftFromRecord,
   eventPayloadFromDraft,
   formatClockRange,
   hasEventLogistics,
-  locationPrimaryLine,
-  locationSecondaryLine,
   type EventDetailsDraft,
 } from '@/lib/eventDetails'
 import { VOTE } from '@/lib/status'
+import {
+  type LengthType,
+  LENGTH_LABELS,
+  LENGTH_HELPERS,
+  LENGTH_TYPES,
+  normalizeLengthType,
+  rangeSubLabel,
+} from '@/lib/lengthType'
+import {
+  type AvailabilityRow,
+  type Buckets,
+  type Participant,
+  type ScoredRange,
+  densityForDay,
+  findBestRanges,
+  getRange,
+  scoreRange,
+  summarizeBuckets,
+} from '@/lib/availability'
 import Card from '@/app/components/Card'
 import StatusChip from '@/app/components/StatusChip'
 import IconTile from '@/app/components/IconTile'
@@ -33,12 +48,14 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
-  InfoIcon,
   MapPinIcon,
+  MoreIcon,
+  NoteIcon,
   PencilIcon,
+  ShareIcon,
+  UsersIcon,
+  XIcon,
 } from '@/app/components/icons'
-
-const TOTAL_FRIENDS = 12
 
 const RESPONSES = [
   { label: 'Best', value: 'best', points: 3 },
@@ -47,7 +64,7 @@ const RESPONSES = [
 ] as const
 type ResponseValue = typeof RESPONSES[number]['value']
 
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 type DateOption = {
@@ -61,12 +78,13 @@ type DateOption = {
   conflictScore: number
 }
 
-type Event = {
+type EventRow = {
   id: string
   title: string
   description: string | null
   status: string
   created_by: string | null
+  created_at: string | null
   confirmed_date?: string | null
   confirmed_end_date?: string | null
   location_name?: string | null
@@ -75,73 +93,73 @@ type Event = {
   event_notes?: string | null
   start_time?: string | null
   end_time?: string | null
+  length_type?: string | null
 }
 
 type GroupBlackouts = Record<string, string[]>
 
-type BestDate = { date: string; availableCount: number; blockedCount: number }
-
-function getRange(a: string, b: string): string[] {
-  const start = new Date(a + 'T12:00:00')
-  const end = new Date(b + 'T12:00:00')
-  const [s, e] = start <= end ? [start, end] : [end, start]
-  const days: string[] = []
-  const cur = new Date(s)
-  while (cur <= e) {
-    days.push(cur.toISOString().split('T')[0])
-    cur.setDate(cur.getDate() + 1)
-  }
-  return days
-}
-
-function getDaysInRange(start: string, end?: string | null): string[] {
-  if (!end || end === start) return [start]
-  return getRange(start, end)
-}
-
-function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
+function formatDay(iso: string, opts?: Intl.DateTimeFormatOptions) {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', opts ?? { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-function formatDateRange(start: string, end?: string | null): string {
-  if (!end || end === start) return formatDate(start)
-  const count = getDaysInRange(start, end).length
-  return `${formatDate(start, { month: 'short', day: 'numeric' })} – ${formatDate(end, { month: 'short', day: 'numeric' })} · ${count} days`
+function formatRange(start: string, end?: string | null): string {
+  if (!end || end === start) return formatDay(start)
+  return `${formatDay(start, { weekday: 'short', month: 'short', day: 'numeric' })} – ${formatDay(end, { weekday: 'short', month: 'short', day: 'numeric' })}`
 }
 
-function scoreFor(totalPoints: number, blockedCount: number): number {
-  return totalPoints - blockedCount * 2
+function shortLocation(locationName: string | null | undefined, address: string | null | undefined): string | null {
+  const trimmedName = locationName?.trim()
+  if (trimmedName) return trimmedName
+  const trimmedAddress = address?.trim()
+  if (!trimmedAddress) return null
+  // Try to derive "City, ST" from a US-ish address string
+  const parts = trimmedAddress.split(',').map((part) => part.trim()).filter(Boolean)
+  if (parts.length >= 2) {
+    const city = parts[parts.length - 2]
+    const stateZip = parts[parts.length - 1].split(' ').filter(Boolean)
+    const stateAbbrev = stateZip[0] ?? ''
+    if (city && stateAbbrev.length === 2) return `${city}, ${stateAbbrev.toUpperCase()}`
+  }
+  return trimmedAddress
 }
 
-function calendarCellTint(blockedCount: number): string {
-  if (blockedCount === 0) return 'bg-cream text-ink hover:bg-sand'
-  const ratio = blockedCount / TOTAL_FRIENDS
-  if (ratio < 0.25) return 'bg-amber-tint text-amber hover:bg-amber-soft'
-  if (ratio < 0.5) return 'bg-amber-soft text-amber hover:bg-amber-soft/80'
-  return 'bg-blush-soft text-blush hover:bg-blush-soft/80'
+function densityClasses(density: ReturnType<typeof densityForDay>): string {
+  switch (density) {
+    case 'few': return 'bg-amber-tint text-amber'
+    case 'some': return 'bg-amber-soft text-amber'
+    case 'many': return 'bg-blush-soft text-blush'
+    default: return 'bg-cream text-ink hover:bg-sand'
+  }
 }
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [name] = useName()
-  const [event, setEvent] = useState<Event | null>(null)
-  const [detailDraft, setDetailDraft] = useState<EventDetailsDraft>(() => eventDraftFromRecord())
-  const [editingDetails, setEditingDetails] = useState(false)
-  const [savingDetails, setSavingDetails] = useState(false)
-  const [detailMessage, setDetailMessage] = useState<string | null>(null)
-  const [detailError, setDetailError] = useState<string | null>(null)
-  const [dateOptions, setDateOptions] = useState<DateOption[]>([])
+  const [event, setEvent] = useState<EventRow | null>(null)
+  const [participants, setParticipants] = useState<Participant[]>([])
+  const [availability, setAvailability] = useState<AvailabilityRow[]>([])
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
-  const [bestDates, setBestDates] = useState<BestDate[]>([])
-  const [addingDate, setAddingDate] = useState(false)
+  const [dateOptions, setDateOptions] = useState<DateOption[]>([])
+
   const [voting, setVoting] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [addingDate, setAddingDate] = useState(false)
+  const [savingDetails, setSavingDetails] = useState(false)
+  const [savingLength, setSavingLength] = useState(false)
+
+  const [editingDetails, setEditingDetails] = useState(false)
+  const [editingLength, setEditingLength] = useState(false)
+  const [showAllBest, setShowAllBest] = useState(false)
+  const [detailDraft, setDetailDraft] = useState<EventDetailsDraft>(() => eventDraftFromRecord())
+  const [detailMessage, setDetailMessage] = useState<string | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
 
   const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null)
   const [calPreview, setCalPreview] = useState<Set<string>>(new Set())
   const calDrag = useRef<string | null>(null)
+  const calCardRef = useRef<HTMLDivElement | null>(null)
 
-  const today = new Date()
+  const today = useMemo(() => new Date(), [])
   const todayISO = today.toISOString().split('T')[0]
   const [calYear, setCalYear] = useState(today.getFullYear())
   const [calMonth, setCalMonth] = useState(today.getMonth())
@@ -161,39 +179,29 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       supabase.from('events').select('*').eq('id', id).single(),
       supabase.from('date_options').select('id, date, end_date').eq('event_id', id).order('date', { ascending: true }),
       supabase.from('votes').select('date_option_id, response, points, user_id'),
-      supabase.from('users').select('id, name'),
+      supabase.from('users').select('id, name').order('name', { ascending: true }),
       supabase.from('availability').select('user_id, date'),
     ])
 
-    if (eventError) {
-      console.error('event load:', eventError)
-    }
-
+    if (eventError) console.error('event load:', eventError)
     if (ev) {
-      setEvent(ev)
+      setEvent(ev as EventRow)
       setDetailDraft(eventDraftFromRecord(ev))
     }
 
-    const userMap = Object.fromEntries((users ?? []).map((user) => [user.id, user.name]))
+    const userList = ((users ?? []) as Participant[])
+    setParticipants(userList)
+    const availList = (avail ?? []) as AvailabilityRow[]
+    setAvailability(availList)
 
+    const userMap = Object.fromEntries(userList.map((u) => [u.id, u.name]))
     const blackoutsMap: GroupBlackouts = {}
-    for (const row of avail ?? []) {
+    for (const row of availList) {
       const displayName = userMap[row.user_id]
       if (!displayName) continue
       ;(blackoutsMap[row.date] ??= []).push(displayName)
     }
     setGroupBlackouts(blackoutsMap)
-
-    const ninetyDays: BestDate[] = []
-    for (let i = 1; i <= 90; i++) {
-      const d = new Date(today)
-      d.setDate(today.getDate() + i)
-      const iso = d.toISOString().split('T')[0]
-      const blocked = blackoutsMap[iso]?.length ?? 0
-      ninetyDays.push({ date: iso, blockedCount: blocked, availableCount: TOTAL_FRIENDS - blocked })
-    }
-    ninetyDays.sort((a, b) => a.blockedCount - b.blockedCount || a.date.localeCompare(b.date))
-    setBestDates(ninetyDays.slice(0, 5))
 
     if (!options || options.length === 0) {
       setDateOptions([])
@@ -211,27 +219,81 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           points: vote.points,
           user_name: userMap[vote.user_id] ?? '?',
         }))
-
       const totalPoints = optionVotes.reduce((sum, vote) => sum + vote.points, 0)
-      const optionDays = getDaysInRange(option.date, option.end_date)
+      const optionDays = getRange(option.date, option.end_date ?? option.date)
       const blockedSet = new Set<string>()
-      optionDays.forEach((day) => (blackoutsMap[day] ?? []).forEach((blockedName) => blockedSet.add(blockedName)))
+      for (const day of optionDays) (blackoutsMap[day] ?? []).forEach((n) => blockedSet.add(n))
       const blockedNames = [...blockedSet]
-
       return {
         ...option,
         votes: optionVotes,
         totalPoints,
         blockedCount: blockedNames.length,
         blockedNames,
-        conflictScore: scoreFor(totalPoints, blockedNames.length),
+        conflictScore: totalPoints - blockedNames.length * 2,
       }
     })
 
-    setDateOptions(enriched.sort((a, b) => {
+    enriched.sort((a, b) => {
       if (b.conflictScore !== a.conflictScore) return b.conflictScore - a.conflictScore
       return a.blockedCount - b.blockedCount
-    }))
+    })
+    setDateOptions(enriched)
+  }
+
+  const lengthType: LengthType = normalizeLengthType(event?.length_type)
+  const isConfirmed = event?.status === 'confirmed'
+  const isCreator = !!name && !!event?.created_by && event.created_by === name
+
+  const bestRanges: ScoredRange[] = useMemo(() => {
+    if (!participants.length) return []
+    return findBestRanges(lengthType, participants, availability, todayISO).slice(0, 12)
+  }, [lengthType, participants, availability, todayISO])
+
+  const topBest = bestRanges[0]
+  const visibleBest = showAllBest ? bestRanges : bestRanges.slice(0, 3)
+  const totalParticipants = participants.length
+
+  const topOption = dateOptions[0]
+  const secondOption = dateOptions[1]
+  const hasVotes = (topOption?.votes.length ?? 0) > 0
+  const isLeading = hasVotes && (!secondOption || topOption.conflictScore > secondOption.conflictScore)
+  const showConfirm = !isConfirmed && isLeading
+  const myBestOptionId = dateOptions.find((option) => option.votes.find((voteRow) => voteRow.user_name === name)?.response === 'best')?.id ?? null
+
+  const headerLocationLine = event ? shortLocation(event.location_name, event.location_address) : null
+  const headerAddressLine = event?.location_address?.trim() && headerLocationLine !== event.location_address?.trim()
+    ? event.location_address.trim()
+    : null
+  const mapUrl = buildAppleMapsUrl(event?.location_name, event?.location_address)
+
+  const whenLabel = isConfirmed && event?.confirmed_date
+    ? formatRange(event.confirmed_date, event.confirmed_end_date)
+    : topOption
+      ? formatRange(topOption.date, topOption.end_date)
+      : 'Dates still being proposed'
+
+  const timeLabel = event ? formatClockRange(event.start_time, event.end_time) : null
+  const placeFullLabel = event?.location_address?.trim() || event?.location_name?.trim() || 'Location not added yet'
+  const notesLabel = event?.event_notes?.trim() || 'No notes yet'
+  const notesIsPlaceholder = !event?.event_notes?.trim()
+
+  const selectedScore: ScoredRange | null = selectedRange && participants.length > 0
+    ? scoreRange(selectedRange.start, selectedRange.end, participants, availability)
+    : null
+
+  // ─────────── handlers ───────────
+
+  function focusCalendar() {
+    calCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function seedFromBest(range: ScoredRange) {
+    setSelectedRange({ start: range.startDate, end: range.endDate })
+    const next = new Date(range.startDate + 'T12:00:00')
+    setCalYear(next.getFullYear())
+    setCalMonth(next.getMonth())
+    requestAnimationFrame(focusCalendar)
   }
 
   async function addDateOption() {
@@ -262,7 +324,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           .eq('response', 'best')
           .in('date_option_id', otherIds)
         if (previousBest && previousBest.length > 0) {
-          await supabase.from('votes').delete().in('id', previousBest.map((voteRow) => voteRow.id))
+          await supabase.from('votes').delete().in('id', previousBest.map((row) => row.id))
         }
       }
     }
@@ -313,14 +375,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setDetailError(null)
 
     const payload = eventPayloadFromDraft(detailDraft)
-    const includeExtendedDetails = hasEventLogistics(payload) || hasEventLogistics(event)
-    const updatePayload = includeExtendedDetails
-      ? payload
-      : { title: payload.title, description: payload.description }
+    const includeExtended = hasEventLogistics(payload) || hasEventLogistics(event)
+    const update = includeExtended ? payload : { title: payload.title, description: payload.description }
 
     const { data, error } = await supabase
       .from('events')
-      .update(updatePayload)
+      .update(update)
       .eq('id', event.id)
       .select('*')
       .single()
@@ -331,33 +391,56 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       return
     }
 
-    const nextEvent = (data ?? { ...event, ...updatePayload }) as Event
-    setEvent(nextEvent)
-    setDetailDraft(eventDraftFromRecord(nextEvent))
+    const next = (data ?? { ...event, ...update }) as EventRow
+    setEvent(next)
+    setDetailDraft(eventDraftFromRecord(next))
     setEditingDetails(false)
     setSavingDetails(false)
     setDetailMessage('Event details saved.')
   }
 
-  async function copyAddress() {
-    const address = event?.location_address?.trim()
-    if (!address || !navigator?.clipboard) return
+  async function saveLength(value: LengthType) {
+    if (!event || savingLength) return
+    setSavingLength(true)
+    const { data, error } = await supabase
+      .from('events')
+      .update({ length_type: value })
+      .eq('id', event.id)
+      .select('*')
+      .single()
+    if (error) {
+      setDetailError(eventSaveError(error.message))
+      setSavingLength(false)
+      return
+    }
+    setEvent((data ?? { ...event, length_type: value }) as EventRow)
+    setSavingLength(false)
+    setEditingLength(false)
+    setShowAllBest(false) // length change resets the expanded list
+  }
+
+  async function shareEvent() {
+    if (typeof window === 'undefined' || !event) return
+    const url = window.location.href
+    const title = event.title || 'Summer Plans event'
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url })
+        return
+      } catch {
+        /* user dismissed — fall through to clipboard */
+      }
+    }
     try {
-      await navigator.clipboard.writeText(address)
-      setDetailMessage('Address copied.')
+      await navigator.clipboard?.writeText(url)
+      setDetailMessage('Link copied.')
       setDetailError(null)
     } catch {
-      setDetailError('Could not copy the address from this browser.')
+      setDetailError('Could not copy the link from this browser.')
     }
   }
 
-  function updateDraft<K extends keyof EventDetailsDraft>(key: K, value: EventDetailsDraft[K]) {
-    setDetailDraft((current) => ({ ...current, [key]: value }))
-  }
-
-  function myVote(option: DateOption) {
-    return option.votes.find((voteRow) => voteRow.user_name === name)?.response ?? null
-  }
+  // ─────────── calendar interactions ───────────
 
   function calStartDrag(iso: string) {
     if (iso < todayISO) return
@@ -365,12 +448,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setCalPreview(new Set([iso]))
     setSelectedRange(null)
   }
-
   function calMoveDrag(iso: string) {
     if (!calDrag.current || iso < todayISO) return
     setCalPreview(new Set(getRange(calDrag.current, iso)))
   }
-
   function calCommitDrag() {
     if (!calDrag.current || calPreview.size === 0) {
       calDrag.current = null
@@ -382,520 +463,371 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     calDrag.current = null
     setCalPreview(new Set())
   }
-
   function isoFromTouch(touch: { clientX: number; clientY: number }) {
     const target = document.elementFromPoint(touch.clientX, touch.clientY)
     return target?.getAttribute('data-iso') ?? null
   }
-
-  function prevCalMonth() {
-    if (calMonth === 0) {
-      setCalMonth(11)
-      setCalYear((year) => year - 1)
-    } else {
-      setCalMonth((month) => month - 1)
-    }
+  function prevMonth() {
+    if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1) } else setCalMonth((m) => m - 1)
   }
-
-  function nextCalMonth() {
-    if (calMonth === 11) {
-      setCalMonth(0)
-      setCalYear((year) => year + 1)
-    } else {
-      setCalMonth((month) => month + 1)
-    }
+  function nextMonth() {
+    if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1) } else setCalMonth((m) => m + 1)
   }
 
   const firstDay = new Date(calYear, calMonth, 1).getDay()
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
   const calCells: (string | null)[] = [
     ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, index) => {
-      const day = index + 1
+    ...Array.from({ length: daysInMonth }, (_, idx) => {
+      const day = idx + 1
       return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }),
   ]
   while (calCells.length % 7 !== 0) calCells.push(null)
 
-  const isConfirmed = event?.status === 'confirmed'
-  const topOption = dateOptions[0]
-  const secondOption = dateOptions[1]
-  const hasVotes = (topOption?.votes.length ?? 0) > 0
-  const isLeading = hasVotes && (!secondOption || topOption.conflictScore > secondOption.conflictScore)
-  const showConfirm = !isConfirmed && isLeading
-  const myBestOptionId = dateOptions.find((option) => myVote(option) === 'best')?.id ?? null
-  const canEditDetails = !!name && !!event?.created_by && event.created_by === name
-  const mapUrl = buildAppleMapsUrl(event?.location_name, event?.location_address)
-  const logisticsSummary = event ? compactEventDetails(event) : null
-  const whenDateLabel = isConfirmed && event?.confirmed_date
-    ? formatDateRange(event.confirmed_date, event.confirmed_end_date)
-    : topOption
-      ? formatDateRange(topOption.date, topOption.end_date)
-      : null
-  const timeLabel = event ? formatClockRange(event.start_time, event.end_time) : null
-  const placeLabel = event ? locationPrimaryLine(event) : null
-  const placeSubLabel = event ? locationSecondaryLine(event) : null
-
-  const confirmedBlockedNames = (() => {
-    if (!isConfirmed || !event?.confirmed_date) return []
-    const days = getDaysInRange(event.confirmed_date, event.confirmed_end_date)
-    const names = new Set<string>()
-    days.forEach((day) => (groupBlackouts[day] ?? []).forEach((blockedName) => names.add(blockedName)))
-    return [...names].sort()
-  })()
-
-  const selectedConflicts = selectedRange
-    ? (() => {
-        const days = getDaysInRange(selectedRange.start, selectedRange.end)
-        const names = new Set<string>()
-        days.forEach((day) => (groupBlackouts[day] ?? []).forEach((blockedName) => names.add(blockedName)))
-        return names.size
-      })()
-    : 0
+  // ─────────── render ───────────
 
   if (!event) {
     return (
-      <main className="max-w-md mx-auto px-5">
+      <main className="mx-auto max-w-md px-5">
         <div className="pt-5 pb-2">
-          <div className="h-4 w-20 rounded-full bg-stone animate-pulse" />
+          <div className="h-4 w-20 animate-pulse rounded-full bg-stone" />
         </div>
-        <div className="mt-4 mb-5 flex items-start gap-3 animate-pulse">
-          <div className="h-16 w-16 rounded-[18px] bg-stone" />
+        <div className="mt-4 mb-5 flex animate-pulse items-start gap-3">
+          <div className="h-20 w-20 rounded-[18px] bg-stone" />
           <div className="flex-1 space-y-2 pt-1">
             <div className="h-6 w-3/4 rounded bg-stone" />
             <div className="h-4 w-1/2 rounded bg-stone/60" />
           </div>
         </div>
-        <div className="flex flex-col gap-3 animate-pulse">
-          <div className="h-28 rounded-[var(--radius-lg)] bg-cream" />
-          <div className="h-24 rounded-[var(--radius-lg)] bg-cream" />
-          <div className="h-48 rounded-[var(--radius-lg)] bg-cream" />
+        <div className="flex animate-pulse flex-col gap-3">
+          <div className="h-12 rounded-[var(--radius-md)] bg-stone/60" />
+          <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
+          <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
         </div>
       </main>
     )
   }
 
   const category = categoryFor(event.title)
+  const bestSummary = topBest && topBest.buckets.blocked === 0 && topBest.buckets.unknown === 0
+    ? summarizeBuckets(topBest.buckets)
+    : null
 
   return (
-    <main className="max-w-md mx-auto px-5 no-select">
-      <div className="pt-5 pb-2">
-        <Link href="/events" className="inline-flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-ink">
-          <ChevronLeftIcon size={14} />
-          Events
+    <main className="mx-auto max-w-md px-5 pb-12 no-select">
+      {/* Top nav */}
+      <nav className="flex items-center justify-between pt-4 pb-2">
+        <Link
+          href="/events"
+          className="-ml-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:text-ink"
+          aria-label="Back to events"
+        >
+          <ChevronLeftIcon size={18} />
         </Link>
-      </div>
+        <button
+          type="button"
+          className="-mr-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-mute hover:text-ink-soft"
+          aria-label="More options"
+        >
+          <MoreIcon size={18} />
+        </button>
+      </nav>
 
-      <header className="mt-3 mb-5">
-        <div className="flex items-start gap-3">
-          <IconTile Icon={category.Icon} tint={category.tint} size={64} rounded="lg" />
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2">
+      {/* Hero */}
+      <header className="mb-4">
+        <div className="flex items-start gap-4">
+          <IconTile Icon={category.Icon} tint={category.tint} size={84} rounded="lg" iconSize={42} />
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="mb-1">
               <StatusChip
                 status={isConfirmed ? 'confirmed' : (dateOptions.length > 0 ? 'voting' : 'tentative')}
                 size="xs"
               />
-              {canEditDetails ? (
-                <button
-                  onClick={() => {
-                    setDetailDraft(eventDraftFromRecord(event))
-                    setEditingDetails((current) => !current)
-                    setDetailMessage(null)
-                    setDetailError(null)
-                  }}
-                  className="inline-flex items-center gap-1 rounded-full bg-sand px-2.5 py-1 text-[11px] font-semibold text-ink-soft"
-                >
-                  <PencilIcon size={12} />
-                  {editingDetails ? 'Close editor' : 'Edit details'}
-                </button>
-              ) : null}
             </div>
-            <h1 className="font-serif text-[30px] leading-[1.08] font-black tracking-tight text-ink">{event.title}</h1>
-            {event.description ? (
-              <p className="mt-1.5 text-sm text-ink-soft">{event.description}</p>
-            ) : (
-              <p className="mt-1.5 text-sm text-ink-mute">No summary added yet.</p>
-            )}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {whenDateLabel ? <MetaPill icon={<CalendarIcon size={13} />} label={whenDateLabel} /> : null}
-              {timeLabel ? <MetaPill icon={<ClockIcon size={13} />} label={timeLabel} /> : null}
-              {placeLabel ? <MetaPill icon={<MapPinIcon size={13} />} label={placeLabel} /> : null}
-            </div>
-            {event.created_by ? (
-              <p className="mt-2 text-xs text-ink-mute">Created by {event.created_by}</p>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
-      {detailMessage ? (
-        <Card className="mb-4 bg-olive-tint text-olive">
-          <p className="text-sm font-medium">{detailMessage}</p>
-        </Card>
-      ) : null}
-      {detailError ? (
-        <Card className="mb-4 bg-blush-tint text-blush">
-          <p className="text-sm font-medium">{detailError}</p>
-        </Card>
-      ) : null}
-
-      {editingDetails ? (
-        <Card className="mb-5">
-          <form
-            onSubmit={(submittedEvent) => {
-              submittedEvent.preventDefault()
-              void saveDetails()
-            }}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-[14px] bg-terracotta-tint text-terracotta">
-                <PencilIcon size={16} />
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">Edit details</p>
-                <p className="text-sm text-ink-soft">Make this feel like a real plan, not just a vote.</p>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              <input
-                type="text"
-                value={detailDraft.title}
-                onChange={(e) => updateDraft('title', e.target.value)}
-                placeholder="Event title"
-                className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-              />
-              <textarea
-                value={detailDraft.description}
-                onChange={(e) => updateDraft('description', e.target.value)}
-                placeholder="Short summary"
-                rows={2}
-                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-              />
-              <EventLocationFields
-                idPrefix={`event-${event?.id ?? 'details'}`}
-                locationName={detailDraft.location_name}
-                locationAddress={detailDraft.location_address}
-                onLocationNameChange={(value) => updateDraft('location_name', value)}
-                onLocationAddressChange={(value) => updateDraft('location_address', value)}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="time"
-                  value={detailDraft.start_time}
-                  onChange={(e) => updateDraft('start_time', e.target.value)}
-                  className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-                />
-                <input
-                  type="time"
-                  value={detailDraft.end_time}
-                  onChange={(e) => updateDraft('end_time', e.target.value)}
-                  className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-                />
-              </div>
-              <textarea
-                value={detailDraft.event_notes}
-                onChange={(e) => updateDraft('event_notes', e.target.value)}
-                placeholder="Group notes: cost, what to bring, what the plan is"
-                rows={3}
-                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-              />
-              <textarea
-                value={detailDraft.location_notes}
-                onChange={(e) => updateDraft('location_notes', e.target.value)}
-                placeholder="Parking / gate / meetup notes"
-                rows={2}
-                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-              />
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                disabled={!detailDraft.title.trim() || savingDetails}
-                type="submit"
-                className="flex-1 rounded-xl bg-olive py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
-              >
-                {savingDetails ? 'Saving…' : 'Save details'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingDetails(false)
-                  setDetailDraft(eventDraftFromRecord(event))
-                  setDetailError(null)
-                }}
-                className="rounded-xl bg-sand px-4 py-2.5 text-sm font-semibold text-ink-soft"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </Card>
-      ) : !hasEventLogistics(event) && canEditDetails ? (
-        <Card className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">Needs details</p>
-          <p className="mt-1 text-sm text-ink-soft">
-            Add the location, timing, and notes that help everyone actually show up.
-          </p>
-          <button
-            onClick={() => setEditingDetails(true)}
-            className="mt-4 inline-flex rounded-xl bg-olive px-4 py-2.5 text-sm font-bold text-white"
-          >
-            Add details
-          </button>
-        </Card>
-      ) : null}
-
-      <div className="mb-5 flex flex-col gap-3">
-        <DetailCard
-          icon={<CalendarIcon size={16} />}
-          label="When"
-          title={whenDateLabel ?? 'Dates still being proposed'}
-          body={timeLabel ?? (isConfirmed ? 'No meeting time added yet.' : 'Add a meeting time when you know it.')}
-        />
-
-        <DetailCard
-          icon={<MapPinIcon size={16} />}
-          label="Where"
-          title={placeLabel ?? 'Location not added yet'}
-          body={placeSubLabel ?? (event.location_notes?.trim() || 'No address or meetup spot yet.')}
-          footer={(
-            <div className="flex flex-wrap gap-2">
-              {mapUrl ? (
+            <h1 className="font-serif text-[34px] leading-[1.05] font-black tracking-tight text-ink">{event.title}</h1>
+            {headerLocationLine ? (
+              mapUrl ? (
                 <a
                   href={mapUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex rounded-full bg-olive px-3 py-1.5 text-xs font-semibold text-white"
+                  className="mt-1.5 inline-flex items-center gap-1.5 text-[15px] font-semibold text-olive"
                 >
-                  Open in Apple Maps
+                  <MapPinIcon size={14} />
+                  {headerLocationLine}
                 </a>
-              ) : null}
-              {event.location_address?.trim() ? (
-                <button
-                  onClick={() => void copyAddress()}
-                  className="inline-flex rounded-full bg-sand px-3 py-1.5 text-xs font-semibold text-ink-soft"
-                >
-                  Copy address
-                </button>
-              ) : null}
-            </div>
-          )}
-        />
+              ) : (
+                <span className="mt-1.5 inline-flex items-center gap-1.5 text-[15px] font-semibold text-olive">
+                  <MapPinIcon size={14} />
+                  {headerLocationLine}
+                </span>
+              )
+            ) : null}
+            {headerAddressLine ? (
+              <p className="mt-0.5 text-sm text-ink-soft">{headerAddressLine}</p>
+            ) : null}
+            <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-ink-soft">
+              <CalendarIcon size={14} />
+              {whenLabel}
+            </p>
+          </div>
+        </div>
+      </header>
 
-        <DetailCard
-          icon={<InfoIcon size={16} />}
-          label="Notes"
-          title={event.event_notes?.trim() || event.location_notes?.trim() ? 'What to know' : 'No notes yet'}
-          body={event.event_notes?.trim() || 'Nothing added for the group yet.'}
-          footer={event.location_notes?.trim() ? (
-            <div className="rounded-[16px] bg-sand px-3 py-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Getting there</p>
-              <p className="mt-1 text-sm text-ink-soft">{event.location_notes}</p>
-            </div>
-          ) : null}
-        />
+      {detailMessage ? <FlashCard tone="olive">{detailMessage}</FlashCard> : null}
+      {detailError ? <FlashCard tone="blush">{detailError}</FlashCard> : null}
+
+      {/* Action row */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={focusCalendar}
+          className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98]"
+        >
+          <CalendarIcon size={14} />
+          Add time
+        </button>
+        <button
+          type="button"
+          disabled={!isCreator}
+          onClick={() => {
+            setDetailDraft(eventDraftFromRecord(event))
+            setDetailError(null)
+            setDetailMessage(null)
+            setEditingDetails(true)
+          }}
+          className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98] disabled:opacity-50"
+          title={isCreator ? undefined : 'Only the event creator can edit details'}
+        >
+          <PencilIcon size={14} />
+          Edit details
+        </button>
+        <button
+          type="button"
+          onClick={() => void shareEvent()}
+          className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98]"
+        >
+          <ShareIcon size={14} />
+          Share
+        </button>
       </div>
 
+      {/* Details */}
+      <Card className="mb-4" padded={false}>
+        <div className="px-4 pt-3 pb-1">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Details</p>
+        </div>
+        <DetailRow
+          icon={<CalendarIcon size={14} />}
+          label="When"
+          value={whenLabel}
+          onTap={focusCalendar}
+          editable={!isConfirmed}
+        />
+        <DetailRow
+          icon={<MapPinIcon size={14} />}
+          label="Where"
+          value={placeFullLabel}
+          onTap={() => {
+            if (!isCreator) return
+            setDetailDraft(eventDraftFromRecord(event))
+            setEditingDetails(true)
+          }}
+          editable={isCreator}
+          muted={!event.location_address?.trim() && !event.location_name?.trim()}
+        />
+        <DetailRow
+          icon={<ClockIcon size={14} />}
+          label="Length"
+          value={LENGTH_LABELS[lengthType]}
+          chip
+          onTap={() => isCreator && setEditingLength(true)}
+          editable={isCreator}
+        />
+        <DetailRow
+          icon={<NoteIcon size={14} />}
+          label="Notes"
+          value={notesLabel}
+          onTap={() => {
+            if (!isCreator) return
+            setDetailDraft(eventDraftFromRecord(event))
+            setEditingDetails(true)
+          }}
+          editable={isCreator}
+          muted={notesIsPlaceholder}
+          last
+        />
+      </Card>
+
+      {/* Time pill (if set) */}
+      {timeLabel ? (
+        <div className="mb-4 flex items-center justify-center gap-2 rounded-[14px] bg-cream px-3 py-2 text-sm text-ink-soft border border-stone/50">
+          <ClockIcon size={14} />
+          <span className="font-medium text-ink">{timeLabel}</span>
+        </div>
+      ) : null}
+
+      {/* Confirmed banner */}
       {isConfirmed && event.confirmed_date ? (
-        <Card className="mb-5 bg-olive text-white" padded={false}>
-          <div className="p-5">
+        <Card className="mb-4 bg-olive text-white" padded={false}>
+          <div className="p-4">
             <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest opacity-70">
               <CheckIcon size={14} />
               It&apos;s happening
             </p>
             <p className="font-serif text-2xl font-black leading-tight">
-              {formatDateRange(event.confirmed_date, event.confirmed_end_date)}
+              {formatRange(event.confirmed_date, event.confirmed_end_date)}
             </p>
-            {logisticsSummary ? (
-              <p className="mt-1 text-sm text-white/80">{logisticsSummary}</p>
-            ) : null}
-            <div className="mt-4 border-t border-white/20 pt-4">
-              {confirmedBlockedNames.length === 0 ? (
-                <p className="text-sm font-semibold">Everyone can make it</p>
-              ) : (
-                <>
-                  <p className="mb-2 text-xs font-semibold opacity-80">
-                    {TOTAL_FRIENDS - confirmedBlockedNames.length}/{TOTAL_FRIENDS} can make it
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {confirmedBlockedNames.map((blockedName) => (
-                      <span key={blockedName} className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium">
-                        {blockedName} can&apos;t
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            {(() => {
+              const score = scoreRange(event.confirmed_date, event.confirmed_end_date ?? event.confirmed_date, participants, availability)
+              if (score.buckets.total === 0) return null
+              return (
+                <p className="mt-2 text-sm text-white/85">
+                  {score.buckets.blocked === 0 && score.buckets.unknown === 0
+                    ? 'Everyone can make it'
+                    : summarizeBuckets(score.buckets)}
+                </p>
+              )
+            })()}
           </div>
         </Card>
       ) : null}
 
+      {/* Confirm button */}
       {showConfirm ? (
         <button
           onClick={confirmEvent}
           disabled={confirming}
-          className="mb-5 w-full rounded-[var(--radius-lg)] bg-olive py-3.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition-all hover:opacity-95 active:scale-[0.98] disabled:opacity-50"
+          className="mb-4 w-full rounded-[var(--radius-lg)] bg-olive py-3.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] disabled:opacity-50"
         >
-          {confirming ? 'Confirming…' : `Lock it in — ${formatDateRange(topOption.date, topOption.end_date)}`}
+          {confirming ? 'Confirming…' : `Lock it in — ${formatRange(topOption.date, topOption.end_date)}`}
         </button>
       ) : null}
 
-      {bestDates.length > 0 && !isConfirmed ? (
-        <Card className="mb-5">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-ink-mute">Best available</p>
-          <p className="mb-3 text-xs text-ink-soft">Tap one to seed the calendar, then drag to extend.</p>
+      {/* Best Available */}
+      {!isConfirmed && bestRanges.length > 0 ? (
+        <Card className="mb-4">
+          <div className="mb-1 flex items-baseline justify-between gap-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Best Available</p>
+            {bestSummary ? (
+              <p className="text-xs font-bold text-olive">{bestSummary}</p>
+            ) : null}
+          </div>
+          <p className="mb-3 text-xs text-ink-soft">Tap a range to seed the calendar, then drag to extend.</p>
           <div className="flex flex-col gap-1.5">
-            {bestDates.map((bestDate) => (
-              <button
-                key={bestDate.date}
-                onClick={() => {
-                  setSelectedRange({ start: bestDate.date, end: bestDate.date })
-                  const nextDate = new Date(bestDate.date + 'T12:00:00')
-                  setCalYear(nextDate.getFullYear())
-                  setCalMonth(nextDate.getMonth())
-                }}
-                className="flex items-center justify-between rounded-xl bg-sand px-3 py-2.5 text-left transition-all hover:bg-sand-alt active:scale-[0.98]"
-              >
-                <p className="text-sm font-semibold text-ink">{formatDate(bestDate.date)}</p>
-                <div className="ml-3 shrink-0 text-right">
-                  <p className="text-xs font-bold text-olive">{bestDate.availableCount}/{TOTAL_FRIENDS} free</p>
-                  {bestDate.blockedCount > 0 ? (
-                    <p className="text-xs text-blush">{bestDate.blockedCount} blocked</p>
-                  ) : null}
-                </div>
-              </button>
+            {visibleBest.map((range) => (
+              <BestRangeRow key={`${range.startDate}_${range.endDate}`} range={range} lengthType={lengthType} onSelect={() => seedFromBest(range)} />
             ))}
           </div>
+          {bestRanges.length > 3 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllBest((current) => !current)}
+              className="mt-3 flex w-full items-center justify-center gap-1 text-sm font-semibold text-olive"
+            >
+              {showAllBest ? 'Show top 3 only' : 'View more dates'}
+              <ChevronRightIcon size={14} className={showAllBest ? 'rotate-[270deg]' : 'rotate-90'} />
+            </button>
+          ) : null}
         </Card>
       ) : null}
 
-      {!isConfirmed ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {RESPONSES.map((response) => {
-            const tone = response.value === 'best' ? VOTE.best : response.value === 'works' ? VOTE.works : VOTE.pass
+      {/* Voting list — only when there are date options */}
+      {dateOptions.length > 0 && !isConfirmed ? (
+        <div className="mb-4 flex flex-col gap-2.5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Proposed dates</p>
+          {dateOptions.map((option, index) => {
+            const myResponse = option.votes.find((row) => row.user_name === name)?.response ?? null
+            const isTop = index === 0 && option.conflictScore > 0
+            const isRange = !!option.end_date && option.end_date !== option.date
             return (
-              <span key={response.value} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${tone.tint} ${tone.text}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-                {response.label} · {response.points}pt
-              </span>
+              <Card key={option.id} className={isTop ? 'ring-1 ring-olive' : ''}>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    {isTop ? <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-olive">Leading</p> : null}
+                    <p className="font-bold text-ink">
+                      {isRange
+                        ? `${formatDay(option.date, { month: 'short', day: 'numeric' })} – ${formatDay(option.end_date!, { month: 'short', day: 'numeric' })}`
+                        : formatDay(option.date)}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-ink-soft">
+                        {option.totalPoints}pt · {option.votes.length} vote{option.votes.length !== 1 ? 's' : ''}
+                      </span>
+                      {option.blockedCount === 0 ? (
+                        <span className="rounded-full bg-olive-tint px-2 py-0.5 text-xs font-semibold text-olive">No conflicts</span>
+                      ) : (
+                        <span className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-semibold text-blush">
+                          {option.blockedCount} blocked
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {name ? (
+                    <div className="flex shrink-0 gap-1">
+                      {RESPONSES.map((response) => {
+                        const isActive = myResponse === response.value
+                        const bestTaken = response.value === 'best' && myBestOptionId !== null && myBestOptionId !== option.id
+                        const tone = response.value === 'best' ? VOTE.best : response.value === 'works' ? VOTE.works : VOTE.pass
+                        return (
+                          <button
+                            key={response.value}
+                            onClick={() => vote(option.id, response.value, response.points)}
+                            disabled={voting === option.id}
+                            title={bestTaken ? 'You already picked Best — click here to move it.' : undefined}
+                            className={[
+                              'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95',
+                              isActive ? tone.strong : bestTaken ? 'bg-sand text-ink-faint' : 'bg-sand text-ink-soft hover:bg-sand-alt',
+                            ].join(' ')}
+                          >
+                            {response.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+
+                {option.votes.length > 0 ? (
+                  <div className="border-t border-sand-alt pt-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {option.votes.map((row) => {
+                        const tone = row.response === 'best' ? VOTE.best : row.response === 'works' ? VOTE.works : VOTE.pass
+                        return (
+                          <span key={row.user_name} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tone.tint} ${tone.text}`}>
+                            <Avatar name={row.user_name} size={14} />
+                            {row.user_name}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {option.blockedNames.length > 0 ? (
+                  <div className="mt-2 border-t border-sand-alt pt-2">
+                    <p className="mb-1.5 text-xs text-ink-mute">Can&apos;t make it ({option.blockedCount})</p>
+                    <div className="flex flex-wrap gap-1">
+                      {option.blockedNames.map((blockedName) => (
+                        <span key={blockedName} className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-medium text-blush">
+                          {blockedName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </Card>
             )
           })}
-          <span className="inline-flex items-center rounded-full bg-sand-alt px-2.5 py-1 text-xs font-semibold text-ink-soft">
-            Ranked by conflict score
-          </span>
         </div>
       ) : null}
 
-      <div className="mb-6 flex flex-col gap-2.5">
-        {dateOptions.length === 0 && !isConfirmed ? (
-          <Card className="py-8 text-center">
-            <p className="text-sm text-ink-soft">No dates proposed yet.</p>
-            <p className="mt-1 text-xs text-ink-mute">Add one below to get voting started.</p>
-          </Card>
-        ) : null}
-
-        {dateOptions.map((option, index) => {
-          const myResponse = myVote(option)
-          const isTop = index === 0 && option.conflictScore > 0 && !isConfirmed
-          const isRange = !!option.end_date && option.end_date !== option.date
-          const dayCount = getDaysInRange(option.date, option.end_date).length
-
-          return (
-            <Card key={option.id} className={isTop ? 'ring-1 ring-olive' : ''}>
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  {isTop ? (
-                    <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-olive">Leading</p>
-                  ) : null}
-                  <p className="font-bold text-ink">
-                    {isRange
-                      ? `${formatDate(option.date, { month: 'short', day: 'numeric' })} – ${formatDate(option.end_date!, { month: 'short', day: 'numeric' })}`
-                      : formatDate(option.date)}
-                  </p>
-                  {isRange ? <p className="text-xs text-ink-mute">{dayCount} days</p> : null}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-ink-soft">
-                      {option.totalPoints}pt · {option.votes.length} vote{option.votes.length !== 1 ? 's' : ''}
-                    </span>
-                    {option.blockedCount === 0 ? (
-                      <span className="rounded-full bg-olive-tint px-2 py-0.5 text-xs font-semibold text-olive">
-                        No conflicts
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-semibold text-blush">
-                        {option.blockedCount} blocked
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {name && !isConfirmed ? (
-                  <div className="shrink-0 flex gap-1">
-                    {RESPONSES.map((response) => {
-                      const isActive = myResponse === response.value
-                      const bestTaken = response.value === 'best' && myBestOptionId !== null && myBestOptionId !== option.id
-                      const tone = response.value === 'best' ? VOTE.best : response.value === 'works' ? VOTE.works : VOTE.pass
-                      return (
-                        <button
-                          key={response.value}
-                          onClick={() => vote(option.id, response.value, response.points)}
-                          disabled={voting === option.id}
-                          title={bestTaken ? 'You already picked Best — click here to move it.' : undefined}
-                          className={[
-                            'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95',
-                            isActive
-                              ? tone.strong
-                              : bestTaken
-                                ? 'bg-sand text-ink-faint'
-                                : 'bg-sand text-ink-soft hover:bg-sand-alt',
-                          ].join(' ')}
-                        >
-                          {response.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : null}
-              </div>
-
-              {option.votes.length > 0 ? (
-                <div className="border-t border-sand-alt pt-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {option.votes.map((voteRow) => {
-                      const tone = voteRow.response === 'best' ? VOTE.best : voteRow.response === 'works' ? VOTE.works : VOTE.pass
-                      return (
-                        <span key={voteRow.user_name} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tone.tint} ${tone.text}`}>
-                          <Avatar name={voteRow.user_name} size={14} />
-                          {voteRow.user_name}
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {option.blockedNames.length > 0 ? (
-                <div className="mt-2 border-t border-sand-alt pt-2">
-                  <p className="mb-1.5 text-xs text-ink-mute">Can&apos;t make it ({option.blockedCount})</p>
-                  <div className="flex flex-wrap gap-1">
-                    {option.blockedNames.map((blockedName) => (
-                      <span key={blockedName} className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-medium text-blush">
-                        {blockedName}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </Card>
-          )
-        })}
-      </div>
-
+      {/* Propose dates / calendar */}
       {name && !isConfirmed ? (
-        <Card className="mb-8">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-ink-mute">Propose dates</p>
+        <div ref={calCardRef} className="mb-6 scroll-mt-4">
+        <Card>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Propose Dates</p>
           <p className="mb-3 text-xs text-ink-soft">Tap a day or drag to select a multi-day range.</p>
 
           <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -904,9 +836,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               ['bg-amber-tint', 'Few blocked'],
               ['bg-amber-soft', 'Some'],
               ['bg-blush-soft', 'Many'],
-            ] as const).map(([className, label]) => (
+            ] as const).map(([cls, label]) => (
               <div key={label} className="flex items-center gap-1.5 text-[11px] text-ink-soft">
-                <span className={`h-3 w-3 rounded ${className}`} />
+                <span className={`h-3 w-3 rounded ${cls}`} />
                 <span>{label}</span>
               </div>
             ))}
@@ -919,15 +851,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           >
             <div className="flex items-center justify-between bg-ink px-3 py-2 text-cream">
               <button
-                onClick={prevCalMonth}
+                onClick={prevMonth}
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Previous month"
               >
                 <ChevronLeftIcon size={16} />
               </button>
-              <span className="text-xs font-semibold">{MONTH_NAMES[calMonth]} {calYear}</span>
+              <span className="text-xs font-semibold">{MONTHS[calMonth]} {calYear}</span>
               <button
-                onClick={nextCalMonth}
+                onClick={nextMonth}
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Next month"
               >
@@ -936,8 +868,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
 
             <div className="grid grid-cols-7 border-b border-sand-alt bg-sand">
-              {DAY_LABELS.map((label, index) => (
-                <div key={`${label}-${index}`} className="py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-ink-mute">{label}</div>
+              {DAY_LABELS.map((label, idx) => (
+                <div key={`${label}-${idx}`} className="py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-ink-mute">{label}</div>
               ))}
             </div>
 
@@ -954,14 +886,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               }}
               onTouchEnd={calCommitDrag}
             >
-              {calCells.map((iso, index) => {
-                if (!iso) return <div key={`empty-${index}`} className="aspect-square" />
+              {calCells.map((iso, idx) => {
+                if (!iso) return <div key={`empty-${idx}`} className="aspect-square" />
                 const isPast = iso < todayISO
                 const isInPreview = calPreview.has(iso)
                 const isInSelected = !!selectedRange && iso >= selectedRange.start && iso <= selectedRange.end
                 const isToday = iso === todayISO
                 const blockedCount = groupBlackouts[iso]?.length ?? 0
                 const day = parseInt(iso.split('-')[2], 10)
+                const density = densityForDay(blockedCount, totalParticipants)
 
                 let cellClass: string
                 if (isPast) {
@@ -971,7 +904,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 } else if (isInPreview) {
                   cellClass = 'bg-olive-soft text-olive font-semibold cursor-pointer'
                 } else {
-                  cellClass = `${calendarCellTint(blockedCount)} cursor-pointer`
+                  cellClass = `${densityClasses(density)} cursor-pointer`
                 }
 
                 return (
@@ -998,10 +931,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
           <div className="flex items-center gap-2">
             <div className="flex min-h-[42px] flex-1 items-center rounded-xl bg-sand px-3 py-2.5 text-sm">
-              {selectedRange ? (
+              {selectedRange && selectedScore ? (
                 <span className="font-medium text-ink">
-                  {formatDateRange(selectedRange.start, selectedRange.end)}
-                  {selectedConflicts > 0 ? ` · ${selectedConflicts} blocked` : ' · no conflicts'}
+                  {formatRange(selectedRange.start, selectedRange.end)}
+                  {selectedScore.buckets.blocked === 0 && selectedScore.buckets.unknown === 0
+                    ? ' · no conflicts'
+                    : ` · ${summarizeBuckets(selectedScore.buckets)}`}
                 </span>
               ) : (
                 <span className="text-ink-mute">Tap or drag to select</span>
@@ -1016,60 +951,290 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </button>
           </div>
         </Card>
+        </div>
+      ) : null}
+
+      {/* Footer metadata */}
+      <footer className="mt-2 flex items-center justify-between rounded-[var(--radius-md)] bg-sand-alt/60 px-3 py-2.5 text-xs text-ink-soft">
+        <div className="flex items-center gap-2">
+          <Avatar name={event.created_by ?? 'Friend'} size={22} />
+          <div className="leading-tight">
+            <p className="font-semibold text-ink">Created by {event.created_by ?? '—'}</p>
+            {event.created_at ? (
+              <p className="text-[11px] text-ink-mute">Created {formatDay(event.created_at.split('T')[0], { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={focusCalendar}
+          className="inline-flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink-soft border border-stone/40"
+        >
+          <UsersIcon size={12} />
+          {totalParticipants > 0 ? `${totalParticipants} invited` : 'Invite list'}
+          <ChevronRightIcon size={12} />
+        </button>
+      </footer>
+
+      {/* Length picker sheet */}
+      {editingLength ? (
+        <Sheet onClose={() => setEditingLength(false)} title="Event length">
+          <p className="mb-4 text-sm text-ink-soft">Changing this updates the Best Available suggestions.</p>
+          <div className="flex flex-col gap-2">
+            {LENGTH_TYPES.map((option) => {
+              const isActive = lengthType === option
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={savingLength}
+                  onClick={() => void saveLength(option)}
+                  className={[
+                    'flex items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors active:scale-[0.99]',
+                    isActive ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
+                  ].join(' ')}
+                >
+                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${isActive ? 'border-olive bg-olive text-white' : 'border-stone'}`}>
+                    {isActive ? <CheckIcon size={12} /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">{LENGTH_LABELS[option]}</span>
+                    <span className="mt-0.5 block text-xs text-ink-soft">{LENGTH_HELPERS[option]}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </Sheet>
+      ) : null}
+
+      {/* Edit details sheet */}
+      {editingDetails ? (
+        <Sheet onClose={() => setEditingDetails(false)} title="Edit details">
+          <form
+            onSubmit={(submittedEvent) => {
+              submittedEvent.preventDefault()
+              void saveDetails()
+            }}
+          >
+            <div className="grid gap-3">
+              <input
+                type="text"
+                value={detailDraft.title}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, title: e.target.value }))}
+                placeholder="Event title"
+                className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+              />
+              <textarea
+                value={detailDraft.description}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, description: e.target.value }))}
+                placeholder="Short summary"
+                rows={2}
+                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+              />
+              <EventLocationFields
+                idPrefix={`event-${event.id}`}
+                locationName={detailDraft.location_name}
+                locationAddress={detailDraft.location_address}
+                onLocationNameChange={(value) => setDetailDraft((d) => ({ ...d, location_name: value }))}
+                onLocationAddressChange={(value) => setDetailDraft((d) => ({ ...d, location_address: value }))}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="time"
+                  value={detailDraft.start_time}
+                  onChange={(e) => setDetailDraft((d) => ({ ...d, start_time: e.target.value }))}
+                  className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                />
+                <input
+                  type="time"
+                  value={detailDraft.end_time}
+                  onChange={(e) => setDetailDraft((d) => ({ ...d, end_time: e.target.value }))}
+                  className="w-full rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                />
+              </div>
+              <textarea
+                value={detailDraft.event_notes}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, event_notes: e.target.value }))}
+                placeholder="Group notes: cost, what to bring, what the plan is"
+                rows={3}
+                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+              />
+              <textarea
+                value={detailDraft.location_notes}
+                onChange={(e) => setDetailDraft((d) => ({ ...d, location_notes: e.target.value }))}
+                placeholder="Parking / gate / meetup notes"
+                rows={2}
+                className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+              />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                disabled={!detailDraft.title.trim() || savingDetails}
+                type="submit"
+                className="flex-1 rounded-xl bg-olive py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+              >
+                {savingDetails ? 'Saving…' : 'Save details'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDetails(false)
+                  setDetailDraft(eventDraftFromRecord(event))
+                  setDetailError(null)
+                }}
+                className="rounded-xl bg-sand px-4 py-2.5 text-sm font-semibold text-ink-soft"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Sheet>
       ) : null}
     </main>
   )
 }
 
-function DetailCard({
+// ─────────── small components ───────────
+
+function DetailRow({
   icon,
   label,
-  title,
-  body,
-  footer,
+  value,
+  chip,
+  onTap,
+  editable,
+  muted,
+  last,
 }: {
   icon: ReactNode
   label: string
-  title: string
-  body: string
-  footer?: ReactNode
+  value: string
+  chip?: boolean
+  onTap?: () => void
+  editable?: boolean
+  muted?: boolean
+  last?: boolean
 }) {
+  const Wrapper = onTap ? 'button' : 'div'
   return (
-    <Card>
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] bg-sand text-olive">
-          {icon}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">{label}</p>
-          <p className="mt-1 text-[16px] font-bold leading-tight text-ink">{title}</p>
-          <p className="mt-1 text-sm leading-6 text-ink-soft">{body}</p>
-        </div>
+    <Wrapper
+      type={onTap ? 'button' : undefined}
+      onClick={onTap}
+      className={[
+        'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
+        last ? '' : 'border-b border-sand-alt',
+        onTap ? 'active:bg-sand-alt/60' : '',
+      ].join(' ')}
+    >
+      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-olive-tint text-olive">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{label}</p>
+        {chip ? (
+          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-olive-tint px-2.5 py-0.5 text-[13px] font-semibold text-olive">
+            {value}
+            <ChevronRightIcon size={12} className="rotate-90" />
+          </span>
+        ) : (
+          <p className={`mt-0.5 truncate text-[14px] font-semibold ${muted ? 'text-ink-mute' : 'text-ink'}`}>{value}</p>
+        )}
       </div>
-      {footer ? <div className="mt-4">{footer}</div> : null}
+      {editable ? <PencilIcon size={14} className="shrink-0 text-ink-mute" /> : null}
+    </Wrapper>
+  )
+}
+
+function BestRangeRow({
+  range,
+  lengthType,
+  onSelect,
+}: {
+  range: ScoredRange
+  lengthType: LengthType
+  onSelect: () => void
+}) {
+  const isRange = range.endDate !== range.startDate
+  const tone = range.buckets.blocked === 0 && range.buckets.unknown === 0
+    ? 'text-olive'
+    : range.buckets.blocked > range.buckets.free
+      ? 'text-blush'
+      : 'text-amber'
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex items-center gap-3 rounded-xl bg-sand px-3 py-2.5 text-left transition-all hover:bg-sand-alt active:scale-[0.99]"
+    >
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cream text-olive border border-stone/50">
+        <CalendarIcon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-ink">
+          {isRange
+            ? `${formatDay(range.startDate, { weekday: 'short', month: 'short', day: 'numeric' })} – ${formatDay(range.endDate, { weekday: 'short', month: 'short', day: 'numeric' })}`
+            : formatDay(range.startDate)}
+        </p>
+        <p className="text-[11px] text-ink-mute">{rangeSubLabel(lengthType)}</p>
+      </div>
+      <p className={`shrink-0 text-xs font-bold ${tone}`}>{summarizeBuckets(range.buckets)}</p>
+      <ChevronRightIcon size={14} className="shrink-0 text-ink-mute" />
+    </button>
+  )
+}
+
+function FlashCard({ tone, children }: { tone: 'olive' | 'blush'; children: ReactNode }) {
+  const cls = tone === 'olive' ? 'bg-olive-tint text-olive' : 'bg-blush-tint text-blush'
+  return (
+    <Card className={`mb-3 ${cls}`}>
+      <p className="text-sm font-medium">{children}</p>
     </Card>
   )
 }
 
-function MetaPill({
-  icon,
-  label,
+function Sheet({
+  onClose,
+  title,
+  children,
 }: {
-  icon: ReactNode
-  label: string
+  onClose: () => void
+  title: string
+  children: ReactNode
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-sand px-2.5 py-1 text-xs font-semibold text-ink-soft">
-      {icon}
-      {label}
-    </span>
+    <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40"
+      />
+      <div className="relative mx-3 mb-3 w-full max-w-md rounded-[24px] bg-cream p-5 shadow-[var(--shadow-raised)]">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-bold uppercase tracking-[0.14em] text-ink-mute">{title}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
+            aria-label="Close"
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
   )
 }
 
 function eventSaveError(message: string) {
   const lower = message.toLowerCase()
+  if (lower.includes('length_type')) {
+    return 'The length_type column is missing in Supabase. Run supabase/migrations/20260425_add_event_length_type.sql.'
+  }
   if (lower.includes('location_') || lower.includes('event_notes') || lower.includes('start_time') || lower.includes('end_time')) {
-    return 'The app code is ready for event details, but the latest event-details SQL migration still needs to be applied in Supabase before those fields can save.'
+    return 'The latest event-details SQL migration still needs to be applied in Supabase before those fields can save.'
   }
   return message
 }

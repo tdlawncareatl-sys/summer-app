@@ -29,6 +29,14 @@ If those fields do not save in Supabase yet, run the idempotent SQL in:
 supabase/migrations/20260425_add_event_details.sql
 ```
 
+The redesigned event detail page also adds an event length field (`couple_hours`,
+`day_long`, `three_day_trip`) that drives the Best Available calculation. If the
+length picker fails to save, run:
+
+```bash
+supabase/migrations/20260425_add_event_length_type.sql
+```
+
 What each one does:
 
 - `npm run test` runs the fast Vitest suite for logic and component behavior.

@@ -149,3 +149,15 @@ export const InfoIcon = (p: IconProps) => (
 export const PencilIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="m5 19 1-4 9-9 3 3-9 9-4 1Z"/><path d="m13.5 7.5 3 3"/></svg>
 )
+
+export const MoreIcon = (p: IconProps) => (
+  <svg {...base(p)}><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>
+)
+
+export const ShareIcon = (p: IconProps) => (
+  <svg {...base(p)}><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6"/></svg>
+)
+
+export const NoteIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M5 5h11l3 3v11H5z"/><path d="M9 12h7M9 15.5h5"/></svg>
+)
