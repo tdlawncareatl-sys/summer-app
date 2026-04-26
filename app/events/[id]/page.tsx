@@ -20,9 +20,7 @@ import {
 import { VOTE } from '@/lib/status'
 import {
   type LengthType,
-  LENGTH_LABELS,
-  LENGTH_HELPERS,
-  LENGTH_TYPES,
+  lengthLabel,
   normalizeLengthType,
   rangeSubLabel,
 } from '@/lib/lengthType'
@@ -154,6 +152,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [detailMessage, setDetailMessage] = useState<string | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
 
+  const [multiDayInput, setMultiDayInput] = useState(2)
   const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null)
   const [calPreview, setCalPreview] = useState<Set<string>>(new Set())
   const calDrag = useRef<string | null>(null)
@@ -167,6 +166,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     void loadAll()
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset the multi-day stepper when the picker opens, so it starts at the
+  // current value (or sensible default of 2 if event isn't multi-day yet).
+  useEffect(() => {
+    if (editingLength) {
+      setMultiDayInput(event?.length_days && event.length_days >= 2 ? event.length_days : 2)
+    }
+  }, [editingLength, event?.length_days])
 
   async function loadAll() {
     const [
@@ -674,7 +681,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <DetailRow
           icon={<ClockIcon size={14} />}
           label="Length"
-          value={LENGTH_LABELS[lengthType]}
+          value={lengthLabel(lengthType)}
           chip
           onTap={() => isCreator && setEditingLength(true)}
           editable={isCreator}
@@ -1029,29 +1036,92 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <Sheet onClose={() => setEditingLength(false)} title="Event length">
           <p className="mb-4 text-sm text-ink-soft">Changing this updates the Best Available suggestions.</p>
           <div className="flex flex-col gap-2">
-            {LENGTH_TYPES.map((option) => {
-              const isActive = lengthType === option
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  disabled={savingLength}
-                  onClick={() => void saveLength(option)}
-                  className={[
-                    'flex items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors active:scale-[0.99]',
-                    isActive ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
-                  ].join(' ')}
+            <LengthPickerRow
+              active={lengthType === 0}
+              disabled={savingLength}
+              title="Partial day"
+              helper="A short hangout — drinks, dinner, a few hours."
+              onClick={() => void saveLength(0)}
+            />
+            <LengthPickerRow
+              active={lengthType === 1}
+              disabled={savingLength}
+              title="One-day event"
+              helper="A full day — beach trip, hike, single-day plan."
+              onClick={() => void saveLength(1)}
+            />
+            <div
+              className={[
+                'rounded-[14px] border transition-colors',
+                lengthType >= 2 ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
+              ].join(' ')}
+            >
+              <button
+                type="button"
+                disabled={savingLength}
+                onClick={() => void saveLength(multiDayInput)}
+                className="flex w-full items-start gap-3 px-3 py-3 text-left active:scale-[0.99]"
+              >
+                <span
+                  className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${
+                    lengthType >= 2 ? 'border-olive bg-olive text-white' : 'border-stone'
+                  }`}
                 >
-                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${isActive ? 'border-olive bg-olive text-white' : 'border-stone'}`}>
-                    {isActive ? <CheckIcon size={12} /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink">{LENGTH_LABELS[option]}</span>
-                    <span className="mt-0.5 block text-xs text-ink-soft">{LENGTH_HELPERS[option]}</span>
-                  </span>
-                </button>
-              )
-            })}
+                  {lengthType >= 2 ? <CheckIcon size={12} /> : null}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-ink">Multi-day trip</span>
+                  <span className="mt-0.5 block text-xs text-ink-soft">Pick exactly how many days the group is together.</span>
+                </span>
+              </button>
+              <div className="flex items-center gap-3 border-t border-stone/40 px-3 py-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-mute">How many days?</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Fewer days"
+                    disabled={savingLength || multiDayInput <= 2}
+                    onClick={() => {
+                      const next = Math.max(2, multiDayInput - 1)
+                      setMultiDayInput(next)
+                      if (lengthType >= 2) void saveLength(next)
+                    }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-stone/60 bg-cream text-base font-bold text-ink-soft disabled:opacity-40"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={2}
+                    max={30}
+                    value={multiDayInput}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value)
+                      if (!Number.isFinite(raw)) return
+                      const next = Math.min(30, Math.max(2, Math.round(raw)))
+                      setMultiDayInput(next)
+                    }}
+                    onBlur={() => {
+                      if (lengthType >= 2 && multiDayInput !== lengthType) void saveLength(multiDayInput)
+                    }}
+                    className="w-14 rounded-lg border border-stone/60 bg-cream px-2 py-1.5 text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                  />
+                  <button
+                    type="button"
+                    aria-label="More days"
+                    disabled={savingLength || multiDayInput >= 30}
+                    onClick={() => {
+                      const next = Math.min(30, multiDayInput + 1)
+                      setMultiDayInput(next)
+                      if (lengthType >= 2) void saveLength(next)
+                    }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-stone/60 bg-cream text-base font-bold text-ink-soft disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </Sheet>
       ) : null}
@@ -1191,6 +1261,44 @@ function DetailRow({
       </div>
       {editable ? <PencilIcon size={14} className="shrink-0 text-ink-mute" /> : null}
     </Wrapper>
+  )
+}
+
+function LengthPickerRow({
+  active,
+  disabled,
+  title,
+  helper,
+  onClick,
+}: {
+  active: boolean
+  disabled?: boolean
+  title: string
+  helper: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        'flex items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors active:scale-[0.99]',
+        active ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
+      ].join(' ')}
+    >
+      <span
+        className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${
+          active ? 'border-olive bg-olive text-white' : 'border-stone'
+        }`}
+      >
+        {active ? <CheckIcon size={12} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs text-ink-soft">{helper}</span>
+      </span>
+    </button>
   )
 }
 
