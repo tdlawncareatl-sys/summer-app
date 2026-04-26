@@ -368,6 +368,27 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setConfirming(false)
   }
 
+  async function unconfirmEvent() {
+    if (!event || confirming) return
+    if (typeof window !== 'undefined' && !window.confirm('Unlock this event so the group can vote on a different date?')) return
+    setConfirming(true)
+    setDetailError(null)
+    setDetailMessage(null)
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'planning', confirmed_date: null, confirmed_end_date: null })
+      .eq('id', event.id)
+    if (error) {
+      setDetailError(error.message)
+      setConfirming(false)
+      return
+    }
+    setEvent({ ...event, status: 'planning', confirmed_date: null, confirmed_end_date: null })
+    setDetailMessage('Confirmation cleared — pick a new date below.')
+    setConfirming(false)
+    requestAnimationFrame(focusCalendar)
+  }
+
   async function saveDetails() {
     if (!event || !detailDraft.title.trim() || savingDetails) return
     setSavingDetails(true)
@@ -580,14 +601,27 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       {/* Action row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={focusCalendar}
-          className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98]"
-        >
-          <CalendarIcon size={14} />
-          Add time
-        </button>
+        {isConfirmed ? (
+          <button
+            type="button"
+            disabled={!isCreator || confirming}
+            onClick={() => void unconfirmEvent()}
+            className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98] disabled:opacity-50"
+            title={isCreator ? undefined : 'Only the event creator can change the date'}
+          >
+            <CalendarIcon size={14} />
+            {confirming ? 'Unlocking…' : 'Change date'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={focusCalendar}
+            className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98]"
+          >
+            <CalendarIcon size={14} />
+            Add time
+          </button>
+        )}
         <button
           type="button"
           disabled={!isCreator}
@@ -672,13 +706,27 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       {isConfirmed && event.confirmed_date ? (
         <Card className="mb-4 bg-olive text-white" padded={false}>
           <div className="p-4">
-            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest opacity-70">
-              <CheckIcon size={14} />
-              It&apos;s happening
-            </p>
-            <p className="font-serif text-2xl font-black leading-tight">
-              {formatRange(event.confirmed_date, event.confirmed_end_date)}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest opacity-70">
+                  <CheckIcon size={14} />
+                  It&apos;s happening
+                </p>
+                <p className="font-serif text-2xl font-black leading-tight">
+                  {formatRange(event.confirmed_date, event.confirmed_end_date)}
+                </p>
+              </div>
+              {isCreator ? (
+                <button
+                  type="button"
+                  onClick={() => void unconfirmEvent()}
+                  disabled={confirming}
+                  className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-white/25 active:scale-[0.98] disabled:opacity-50"
+                >
+                  {confirming ? '…' : 'Change date'}
+                </button>
+              ) : null}
+            </div>
             {(() => {
               const score = scoreRange(event.confirmed_date, event.confirmed_end_date ?? event.confirmed_date, participants, availability)
               if (score.buckets.total === 0) return null

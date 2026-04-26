@@ -57,7 +57,7 @@ describe('findBestRanges', () => {
     for (const range of ranges) expect(range.startDate).toBe(range.endDate)
   })
 
-  it('produces only Friday-anchored 3-day ranges for three_day_trip', () => {
+  it('produces only Friday-anchored 3-day ranges for the legacy three_day_trip string', () => {
     const ranges = findBestRanges('three_day_trip', PARTICIPANTS, SUBMITTED_BASELINE, '2026-05-01', 30)
     expect(ranges.length).toBeGreaterThan(0)
     for (const range of ranges) {
@@ -65,6 +65,21 @@ describe('findBestRanges', () => {
       const days = (new Date(range.endDate + 'T12:00:00').getTime() - new Date(range.startDate + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24)
       expect(days).toBe(2)
     }
+  })
+
+  it('produces N-day rolling windows for an arbitrary length_days value', () => {
+    const ranges = findBestRanges(5, PARTICIPANTS, SUBMITTED_BASELINE, '2026-05-01', 14)
+    expect(ranges.length).toBeGreaterThan(0)
+    for (const range of ranges) {
+      const ms = new Date(range.endDate + 'T12:00:00').getTime() - new Date(range.startDate + 'T12:00:00').getTime()
+      expect(ms / (1000 * 60 * 60 * 24)).toBe(4) // 5-day range = 4-day delta
+    }
+  })
+
+  it('treats couple_hours (0) like a single-day candidate generator', () => {
+    const ranges = findBestRanges(0, PARTICIPANTS, SUBMITTED_BASELINE, '2026-05-01', 5)
+    expect(ranges.length).toBeGreaterThan(0)
+    for (const range of ranges) expect(range.startDate).toBe(range.endDate)
   })
 
   it('ranks higher-free candidates above lower-free ones', () => {
