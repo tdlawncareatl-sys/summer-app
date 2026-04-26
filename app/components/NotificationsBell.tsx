@@ -4,6 +4,14 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { fetchNotifications, type NotificationItem, type NotificationTone } from '@/lib/notifications'
+import {
+  isNotificationUnread,
+  markNotificationsRead,
+  parseNotificationReadState,
+  serializeNotificationReadState,
+  unreadNotificationCount,
+  type NotificationReadState,
+} from '@/lib/notificationReadState'
 import { BellIcon, CheckIcon, LightbulbIcon, StarIcon, CalendarIcon, XIcon } from './icons'
 
 const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
@@ -49,7 +57,10 @@ export default function NotificationsBell() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<NotificationItem[]>([])
-  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null)
+  const [readState, setReadState] = useState<NotificationReadState>({
+    lastSeenAt: null,
+    seenSignatures: [],
+  })
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
 
@@ -64,8 +75,8 @@ export default function NotificationsBell() {
     if (!profile) return
 
     const storageKey = `${LAST_SEEN_PREFIX}:${profile.id}`
-    const storedLastSeen = localStorage.getItem(storageKey)
-    setLastSeenAt(storedLastSeen)
+    const storedState = localStorage.getItem(storageKey)
+    setReadState(parseNotificationReadState(storedState))
 
     let cancelled = false
     setLoading(true)
@@ -92,13 +103,14 @@ export default function NotificationsBell() {
 
   useEffect(() => {
     if (!open || !profile) return
-    const now = new Date().toISOString()
+    if (unreadNotificationCount(items, readState) === 0) return
     const storageKey = `${LAST_SEEN_PREFIX}:${profile.id}`
-    localStorage.setItem(storageKey, now)
-    setLastSeenAt(now)
-  }, [open, profile])
+    const nextState = markNotificationsRead(readState, items)
+    localStorage.setItem(storageKey, serializeNotificationReadState(nextState))
+    setReadState(nextState)
+  }, [open, profile, items, readState])
 
-  const unreadCount = items.filter((item) => !lastSeenAt || item.timestamp > lastSeenAt).length
+  const unreadCount = unreadNotificationCount(items, readState)
 
   return (
     <>
@@ -165,7 +177,7 @@ export default function NotificationsBell() {
               {!error && !loading && items.length > 0 && (
                 <div className="p-3 flex flex-col gap-2">
                   {items.map((item) => {
-                    const unread = !lastSeenAt || item.timestamp > lastSeenAt
+                    const unread = isNotificationUnread(item, readState)
                     const Icon = iconFor(item)
                     const tone = TONE_STYLES[item.tone]
                     return (

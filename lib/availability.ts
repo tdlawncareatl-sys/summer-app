@@ -8,7 +8,7 @@
 // (any date, past or future). Treating no-rows as "unknown" prevents the page from
 // claiming "12/12 free" when nobody has actually opened the app yet.
 
-import { LengthType } from './lengthType'
+import { LengthType, normalizeLengthDays, scheduledDays } from './lengthType'
 
 export type Participant = { id: string; name: string }
 export type AvailabilityRow = { user_id: string; date: string }
@@ -100,6 +100,8 @@ export function findBestRanges(
 ): ScoredRange[] {
   const candidates: { startDate: string; endDate: string }[] = []
   const start = new Date(todayISO + 'T12:00:00')
+  const normalizedLength = normalizeLengthDays(lengthType)
+  const spanDays = scheduledDays(normalizedLength)
 
   if (lengthType === 'three_day_trip') {
     for (let i = 1; i <= horizonDays; i++) {
@@ -110,6 +112,17 @@ export function findBestRanges(
       d.setDate(d.getDate() + 2)
       const endDate = d.toISOString().split('T')[0]
       candidates.push({ startDate, endDate })
+    }
+  } else if (spanDays > 1) {
+    for (let i = 1; i <= horizonDays; i++) {
+      const startDate = new Date(start)
+      startDate.setDate(start.getDate() + i)
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + spanDays - 1)
+      candidates.push({
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+      })
     }
   } else {
     for (let i = 1; i <= horizonDays; i++) {

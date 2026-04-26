@@ -93,7 +93,7 @@ type EventRow = {
   event_notes?: string | null
   start_time?: string | null
   end_time?: string | null
-  length_type?: string | null
+  length_days?: number | null
 }
 
 type GroupBlackouts = Record<string, string[]>
@@ -241,7 +241,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setDateOptions(enriched)
   }
 
-  const lengthType: LengthType = normalizeLengthType(event?.length_type)
+  const lengthType: LengthType = normalizeLengthType(event?.length_days)
   const isConfirmed = event?.status === 'confirmed'
   const isCreator = !!name && !!event?.created_by && event.created_by === name
 
@@ -404,7 +404,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setSavingLength(true)
     const { data, error } = await supabase
       .from('events')
-      .update({ length_type: value })
+      .update({ length_days: value })
       .eq('id', event.id)
       .select('*')
       .single()
@@ -413,7 +413,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       setSavingLength(false)
       return
     }
-    setEvent((data ?? { ...event, length_type: value }) as EventRow)
+    setEvent((data ?? { ...event, length_days: value }) as EventRow)
     setSavingLength(false)
     setEditingLength(false)
     setShowAllBest(false) // length change resets the expanded list
@@ -1230,8 +1230,8 @@ function Sheet({
 
 function eventSaveError(message: string) {
   const lower = message.toLowerCase()
-  if (lower.includes('length_type')) {
-    return 'The length_type column is missing in Supabase. Run supabase/migrations/20260425_add_event_length_type.sql.'
+  if (lower.includes('length_days') || lower.includes('length_type')) {
+    return 'The length_days column is missing in Supabase. Run supabase/migrations/20260425_add_event_length_type.sql.'
   }
   if (lower.includes('location_') || lower.includes('event_notes') || lower.includes('start_time') || lower.includes('end_time')) {
     return 'The latest event-details SQL migration still needs to be applied in Supabase before those fields can save.'

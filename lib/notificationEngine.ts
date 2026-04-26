@@ -81,6 +81,7 @@ export function buildNotifications(input: {
     const options = optionsByEvent[event.id] ?? []
     const eventVotes = options.flatMap((option) => votesByOption[option.id] ?? [])
     const latestVoteAt = eventVotes.map((vote) => vote.created_at).sort().at(-1)
+    const latestOptionAt = options.map((option) => option.created_at).sort().at(-1)
     const userHasVote = eventVotes.some((vote) => vote.user_id === input.userId)
     const isConfirmed = event.status === 'confirmed' && !!event.confirmed_date
 
@@ -91,7 +92,9 @@ export function buildNotifications(input: {
         title: `${event.title} is locked in`,
         body: formatDateRangeShort(event.confirmed_date!, event.confirmed_end_date),
         href: `/events/${event.id}`,
-        timestamp: maxIso(latestVoteAt, event.created_at, event.confirmed_date),
+        // Use activity timestamps, not the future event date itself, so read state
+        // reflects when the plan changed rather than when the plan happens.
+        timestamp: maxIso(latestVoteAt, latestOptionAt, event.created_at),
         tone: 'olive',
       })
       continue
@@ -108,7 +111,6 @@ export function buildNotifications(input: {
         tone: 'terracotta',
       })
     } else if (options.length > 0 && !userHasVote) {
-      const latestOptionAt = options.map((option) => option.created_at).sort().at(-1)
       notifications.push({
         id: `vote-needed:${event.id}`,
         type: 'vote-needed',

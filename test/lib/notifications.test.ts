@@ -54,6 +54,7 @@ describe('buildNotifications', () => {
       title: 'Lake Weekend is locked in',
       href: '/events/event-1',
       tone: 'olive',
+      timestamp: '2026-04-22T10:00:00.000Z',
     })
   })
 
