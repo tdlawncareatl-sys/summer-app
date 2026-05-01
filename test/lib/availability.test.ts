@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { densityForDay, findBestRanges, scoreRange, summarizeBuckets } from '@/lib/availability'
+import { conflictingDatesForOptions, densityForDay, findBestRanges, scoreRange, summarizeBuckets } from '@/lib/availability'
 
 const PARTICIPANTS = [
   { id: 'u1', name: 'Alice' },
@@ -110,5 +110,20 @@ describe('summarizeBuckets', () => {
     expect(summarizeBuckets({ free: 12, blocked: 0, unknown: 0, total: 12 })).toBe('12/12 free')
     expect(summarizeBuckets({ free: 10, blocked: 2, unknown: 0, total: 12 })).toBe('10/12 free · 2 blocked')
     expect(summarizeBuckets({ free: 8, blocked: 1, unknown: 3, total: 12 })).toBe('8/12 free · 1 blocked · 3 unknown')
+  })
+})
+
+describe('conflictingDatesForOptions', () => {
+  it('expands multi-day options and deduplicates the conflicting dates', () => {
+    const conflicts = conflictingDatesForOptions(
+      [
+        { date: '2026-06-19', end_date: '2026-06-21' },
+        { date: '2026-06-21', end_date: '2026-06-22' },
+      ],
+      new Set(['2026-06-20', '2026-06-21', '2026-06-23']),
+      '2026-06-01',
+    )
+
+    expect(conflicts).toEqual(['2026-06-20', '2026-06-21'])
   })
 })

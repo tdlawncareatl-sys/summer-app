@@ -28,6 +28,11 @@ export type ScoredRange = {
   unknownNames: string[]
 }
 
+export type EventOptionRange = {
+  date: string
+  end_date?: string | null
+}
+
 export function getRange(startISO: string, endISO: string): string[] {
   if (endISO === startISO) return [startISO]
   const start = new Date(startISO + 'T12:00:00')
@@ -165,4 +170,26 @@ export function summarizeBuckets(buckets: Buckets): string {
   if (buckets.blocked > 0) parts.push(`${buckets.blocked} blocked`)
   if (buckets.unknown > 0) parts.push(`${buckets.unknown} unknown`)
   return parts.join(' · ')
+}
+
+/**
+ * For a set of proposed event options, return the exact dates that conflict
+ * with a user's blackout set. Multi-day options expand across their full span.
+ */
+export function conflictingDatesForOptions(
+  options: EventOptionRange[],
+  blackouts: Set<string>,
+  todayISO: string,
+): string[] {
+  const conflicts = new Set<string>()
+
+  for (const option of options) {
+    for (const day of getRange(option.date, option.end_date ?? option.date)) {
+      if (day >= todayISO && blackouts.has(day)) {
+        conflicts.add(day)
+      }
+    }
+  }
+
+  return [...conflicts].sort()
 }

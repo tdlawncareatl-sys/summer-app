@@ -46,6 +46,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
+  CopyIcon,
   MapPinIcon,
   MoreIcon,
   NoteIcon,
@@ -134,6 +135,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const { id } = use(params)
   const [name] = useName()
   const [event, setEvent] = useState<EventRow | null>(null)
+  const [loadingEvent, setLoadingEvent] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [availability, setAvailability] = useState<AvailabilityRow[]>([])
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
@@ -147,6 +150,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const [editingDetails, setEditingDetails] = useState(false)
   const [editingLength, setEditingLength] = useState(false)
+  const [showOptions, setShowOptions] = useState(false)
+  const [showCrew, setShowCrew] = useState(false)
   const [showAllBest, setShowAllBest] = useState(false)
   const [detailDraft, setDetailDraft] = useState<EventDetailsDraft>(() => eventDraftFromRecord())
   const [detailMessage, setDetailMessage] = useState<string | null>(null)
@@ -176,6 +181,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }, [editingLength, event?.length_days])
 
   async function loadAll() {
+    setLoadingEvent(true)
+    setLoadError(null)
+
     const [
       { data: ev, error: eventError },
       { data: options },
@@ -190,11 +198,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       supabase.from('availability').select('user_id, date'),
     ])
 
-    if (eventError) console.error('event load:', eventError)
-    if (ev) {
-      setEvent(ev as EventRow)
-      setDetailDraft(eventDraftFromRecord(ev))
+    if (eventError || !ev) {
+      setEvent(null)
+      setDateOptions([])
+      setLoadError(eventError?.message ?? 'Could not find that event.')
+      setLoadingEvent(false)
+      return
     }
+
+    setEvent(ev as EventRow)
+    setDetailDraft(eventDraftFromRecord(ev))
 
     const userList = ((users ?? []) as Participant[])
     setParticipants(userList)
@@ -212,6 +225,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
     if (!options || options.length === 0) {
       setDateOptions([])
+      setLoadingEvent(false)
       return
     }
 
@@ -246,6 +260,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       return a.blockedCount - b.blockedCount
     })
     setDateOptions(enriched)
+    setLoadingEvent(false)
   }
 
   const lengthType: LengthType = normalizeLengthType(event?.length_days)
@@ -273,6 +288,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     ? event.location_address.trim()
     : null
   const mapUrl = buildAppleMapsUrl(event?.location_name, event?.location_address)
+  const summaryText = event?.description?.trim() || null
+  const groupNotes = event?.event_notes?.trim() || null
+  const locationNotes = event?.location_notes?.trim() || null
+  const copyableLocation = event?.location_address?.trim() || event?.location_name?.trim() || null
+  const copyLocationLabel = event?.location_address?.trim() ? 'Copy address' : 'Copy location'
 
   const whenLabel = isConfirmed && event?.confirmed_date
     ? formatRange(event.confirmed_date, event.confirmed_end_date)
@@ -284,6 +304,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const placeFullLabel = event?.location_address?.trim() || event?.location_name?.trim() || 'Location not added yet'
   const notesLabel = event?.event_notes?.trim() || 'No notes yet'
   const notesIsPlaceholder = !event?.event_notes?.trim()
+  const crewScore = isConfirmed && event?.confirmed_date
+    ? scoreRange(event.confirmed_date, event.confirmed_end_date ?? event.confirmed_date, participants, availability)
+    : topOption
+      ? scoreRange(topOption.date, topOption.end_date ?? topOption.date, participants, availability)
+      : null
+  const crewFreeNames = crewScore
+    ? participants
+      .map((participant) => participant.name)
+      .filter((participantName) => !crewScore.blockedNames.includes(participantName) && !crewScore.unknownNames.includes(participantName))
+      .sort()
+    : []
 
   const selectedScore: ScoredRange | null = selectedRange && participants.length > 0
     ? scoreRange(selectedRange.start, selectedRange.end, participants, availability)
@@ -303,15 +334,30 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     requestAnimationFrame(focusCalendar)
   }
 
+  function startEditingDetails() {
+    if (!event) return
+    setDetailDraft(eventDraftFromRecord(event))
+    setDetailError(null)
+    setDetailMessage(null)
+    setShowOptions(false)
+    setEditingDetails(true)
+  }
+
   async function addDateOption() {
     if (!selectedRange || !name) return
     setAddingDate(true)
+    setDetailError(null)
     await ensureUser(name)
     const payload: Record<string, string> = { event_id: id, date: selectedRange.start, created_by: name }
     if (selectedRange.end !== selectedRange.start) payload.end_date = selectedRange.end
     const { error } = await supabase.from('date_options').insert(payload)
-    if (error) console.error('addDate:', error)
+    if (error) {
+      setDetailError(error.message)
+      setAddingDate(false)
+      return
+    }
     setSelectedRange(null)
+    setDetailMessage('Date option added.')
     setAddingDate(false)
     await loadAll()
   }
@@ -319,60 +365,85 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   async function vote(dateOptionId: string, response: ResponseValue, points: number) {
     if (!name || voting) return
     setVoting(dateOptionId)
-    const userId = await ensureUser(name)
+    setDetailError(null)
 
-    if (response === 'best') {
-      const otherIds = dateOptions.filter((option) => option.id !== dateOptionId).map((option) => option.id)
-      if (otherIds.length > 0) {
-        const { data: previousBest } = await supabase
-          .from('votes')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('response', 'best')
-          .in('date_option_id', otherIds)
-        if (previousBest && previousBest.length > 0) {
-          await supabase.from('votes').delete().in('id', previousBest.map((row) => row.id))
+    try {
+      const userId = await ensureUser(name)
+
+      if (response === 'best') {
+        const otherIds = dateOptions.filter((option) => option.id !== dateOptionId).map((option) => option.id)
+        if (otherIds.length > 0) {
+          const { data: previousBest, error: previousBestError } = await supabase
+            .from('votes')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('response', 'best')
+            .in('date_option_id', otherIds)
+          if (previousBestError) throw previousBestError
+          if (previousBest && previousBest.length > 0) {
+            const { error: clearBestError } = await supabase.from('votes').delete().in('id', previousBest.map((row) => row.id))
+            if (clearBestError) throw clearBestError
+          }
         }
       }
-    }
 
-    const { data: existing } = await supabase
-      .from('votes')
-      .select('id, response')
-      .eq('date_option_id', dateOptionId)
-      .eq('user_id', userId)
-      .single()
+      const { data: existing, error: existingError } = await supabase
+        .from('votes')
+        .select('id, response')
+        .eq('date_option_id', dateOptionId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (existingError) throw existingError
 
-    if (existing) {
-      if (existing.response === response) {
-        await supabase.from('votes').delete().eq('id', existing.id)
+      if (existing) {
+        if (existing.response === response) {
+          const { error } = await supabase.from('votes').delete().eq('id', existing.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase.from('votes').update({ response, points }).eq('id', existing.id)
+          if (error) throw error
+        }
       } else {
-        await supabase.from('votes').update({ response, points }).eq('id', existing.id)
+        const { error } = await supabase.from('votes').insert({ date_option_id: dateOptionId, user_id: userId, response, points })
+        if (error) throw error
       }
-    } else {
-      await supabase.from('votes').insert({ date_option_id: dateOptionId, user_id: userId, response, points })
-    }
 
-    setVoting(null)
-    await loadAll()
+      await loadAll()
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : 'Could not save your vote.')
+    } finally {
+      setVoting(null)
+    }
   }
 
   async function confirmEvent() {
     if (!event || confirming) return
-    setConfirming(true)
     const winner = dateOptions[0]
-    await supabase.from('events').update({
+    if (!winner) {
+      setDetailError('Add at least one date option before confirming the event.')
+      return
+    }
+    setConfirming(true)
+    setDetailError(null)
+    const { error } = await supabase.from('events').update({
       status: 'confirmed',
-      confirmed_date: winner?.date ?? null,
-      confirmed_end_date: winner?.end_date ?? null,
+      confirmed_date: winner.date,
+      confirmed_end_date: winner.end_date ?? null,
     }).eq('id', event.id)
+    if (error) {
+      setDetailError(error.message)
+      setConfirming(false)
+      return
+    }
     setEvent({
       ...event,
       status: 'confirmed',
-      confirmed_date: winner?.date,
-      confirmed_end_date: winner?.end_date,
+      confirmed_date: winner.date,
+      confirmed_end_date: winner.end_date,
     })
+    setDetailMessage('Event confirmed.')
     setConfirming(false)
+    await loadAll()
   }
 
   async function unconfirmEvent() {
@@ -468,6 +539,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  async function copyLocation() {
+    if (typeof window === 'undefined' || !copyableLocation) return
+    try {
+      await navigator.clipboard?.writeText(copyableLocation)
+      setDetailMessage(event?.location_address?.trim() ? 'Address copied.' : 'Location copied.')
+      setDetailError(null)
+      setShowOptions(false)
+    } catch {
+      setDetailError('Could not copy the location from this browser.')
+    }
+  }
+
   // ─────────── calendar interactions ───────────
 
   function calStartDrag(iso: string) {
@@ -515,7 +598,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   // ─────────── render ───────────
 
-  if (!event) {
+  if (loadingEvent) {
     return (
       <main className="mx-auto max-w-md px-5">
         <div className="pt-5 pb-2">
@@ -533,6 +616,34 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
           <div className="h-44 rounded-[var(--radius-lg)] bg-cream" />
         </div>
+      </main>
+    )
+  }
+
+  if (!event) {
+    return (
+      <main className="mx-auto max-w-md px-5">
+        <div className="pt-4 pb-2">
+          <Link
+            href="/events"
+            className="-ml-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:text-ink"
+            aria-label="Back to events"
+          >
+            <ChevronLeftIcon size={18} />
+          </Link>
+        </div>
+        <Card className="mt-4">
+          <p className="text-lg font-semibold text-ink">This event couldn&apos;t be loaded.</p>
+          <p className="mt-2 text-sm leading-6 text-ink-soft">
+            {loadError ?? 'The link may be stale, or the event may have been removed.'}
+          </p>
+          <Link
+            href="/events"
+            className="mt-4 inline-flex items-center gap-2 rounded-[14px] bg-olive px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            Back to events
+          </Link>
+        </Card>
       </main>
     )
   }
@@ -555,6 +666,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         </Link>
         <button
           type="button"
+          onClick={() => setShowOptions(true)}
           className="-mr-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-mute hover:text-ink-soft"
           aria-label="More options"
         >
@@ -599,6 +711,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <CalendarIcon size={14} />
               {whenLabel}
             </p>
+            {summaryText ? (
+              <p className="mt-2 max-w-[28ch] text-sm leading-6 text-ink-soft">{summaryText}</p>
+            ) : null}
           </div>
         </div>
       </header>
@@ -632,12 +747,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <button
           type="button"
           disabled={!isCreator}
-          onClick={() => {
-            setDetailDraft(eventDraftFromRecord(event))
-            setDetailError(null)
-            setDetailMessage(null)
-            setEditingDetails(true)
-          }}
+          onClick={startEditingDetails}
           className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98] disabled:opacity-50"
           title={isCreator ? undefined : 'Only the event creator can edit details'}
         >
@@ -670,11 +780,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           icon={<MapPinIcon size={14} />}
           label="Where"
           value={placeFullLabel}
-          onTap={() => {
-            if (!isCreator) return
-            setDetailDraft(eventDraftFromRecord(event))
-            setEditingDetails(true)
-          }}
+          onTap={isCreator ? startEditingDetails : undefined}
           editable={isCreator}
           muted={!event.location_address?.trim() && !event.location_name?.trim()}
         />
@@ -690,11 +796,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           icon={<NoteIcon size={14} />}
           label="Notes"
           value={notesLabel}
-          onTap={() => {
-            if (!isCreator) return
-            setDetailDraft(eventDraftFromRecord(event))
-            setEditingDetails(true)
-          }}
+          onTap={isCreator ? startEditingDetails : undefined}
           editable={isCreator}
           muted={notesIsPlaceholder}
           last
@@ -707,6 +809,70 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <ClockIcon size={14} />
           <span className="font-medium text-ink">{timeLabel}</span>
         </div>
+      ) : null}
+
+      {(headerLocationLine || headerAddressLine || locationNotes) ? (
+        <Card className="mb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Where</p>
+              {headerLocationLine ? (
+                <p className="mt-1 text-base font-semibold text-ink">{headerLocationLine}</p>
+              ) : null}
+              {headerAddressLine || (!headerLocationLine && placeFullLabel !== 'Location not added yet') ? (
+                <p className="mt-1 text-sm leading-6 text-ink-soft">{headerAddressLine ?? placeFullLabel}</p>
+              ) : null}
+            </div>
+            {isCreator ? (
+              <button
+                type="button"
+                onClick={startEditingDetails}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
+                aria-label="Edit location details"
+              >
+                <PencilIcon size={14} />
+              </button>
+            ) : null}
+          </div>
+          {(mapUrl || copyableLocation) ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {mapUrl ? (
+                <a
+                  href={mapUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-[14px] bg-olive px-3.5 py-2 text-sm font-semibold text-white"
+                >
+                  <MapPinIcon size={14} />
+                  Open in Apple Maps
+                </a>
+              ) : null}
+              {copyableLocation ? (
+                <button
+                  type="button"
+                  onClick={() => void copyLocation()}
+                  className="inline-flex items-center gap-2 rounded-[14px] bg-sand px-3.5 py-2 text-sm font-semibold text-ink-soft"
+                >
+                  <CopyIcon size={14} />
+                  {copyLocationLabel}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {locationNotes ? (
+            <div className="mt-3 rounded-[16px] bg-sand px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-mute">Parking / meetup</p>
+              <p className="mt-1 text-sm leading-6 text-ink-soft">{locationNotes}</p>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {groupNotes ? (
+        <Card className="mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">What to know</p>
+          <p className="mt-1 text-sm leading-6 text-ink-soft">{groupNotes}</p>
+        </Card>
       ) : null}
 
       {/* Confirmed banner */}
@@ -1022,14 +1188,103 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <button
           type="button"
-          onClick={focusCalendar}
-          className="inline-flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink-soft border border-stone/40"
+          onClick={() => setShowCrew(true)}
+          className="inline-flex items-center gap-2 rounded-full bg-cream px-3 py-1.5 text-left text-xs font-semibold text-ink-soft border border-stone/40"
         >
           <UsersIcon size={12} />
-          {totalParticipants > 0 ? `${totalParticipants} invited` : 'Invite list'}
+          <span className="leading-tight">
+            <span className="block text-[10px] uppercase tracking-[0.12em] text-ink-mute">Crew status</span>
+            <span className="block text-xs text-ink-soft">
+              {crewScore ? summarizeBuckets(crewScore.buckets) : totalParticipants > 0 ? `${totalParticipants} in the crew` : 'No crew data yet'}
+            </span>
+          </span>
           <ChevronRightIcon size={12} />
         </button>
       </footer>
+
+      {showOptions ? (
+        <Sheet onClose={() => setShowOptions(false)} title="Event options">
+          <div className="flex flex-col gap-2">
+            <SheetAction
+              icon={<ShareIcon size={14} />}
+              title="Share event"
+              description="Send the event link to the group."
+              onClick={() => void shareEvent().finally(() => setShowOptions(false))}
+            />
+            {mapUrl ? (
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowOptions(false)}
+                className="flex items-start gap-3 rounded-[16px] bg-sand px-4 py-3 text-left"
+              >
+                <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-tint text-teal">
+                  <MapPinIcon size={14} />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-ink">Open in Apple Maps</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-ink-soft">Jump straight into directions.</span>
+                </span>
+              </a>
+            ) : null}
+            {copyableLocation ? (
+              <SheetAction
+                icon={<CopyIcon size={14} />}
+                title={copyLocationLabel}
+                description="Copy the location for texts or navigation."
+                onClick={() => void copyLocation()}
+              />
+            ) : null}
+            {isCreator ? (
+              <SheetAction
+                icon={<PencilIcon size={14} />}
+                title="Edit details"
+                description="Update the name, summary, location, or notes."
+                onClick={startEditingDetails}
+              />
+            ) : null}
+          </div>
+        </Sheet>
+      ) : null}
+
+      {showCrew ? (
+        <Sheet onClose={() => setShowCrew(false)} title="Crew status">
+          {crewScore ? (
+            <div className="space-y-3">
+              <div className="rounded-[16px] bg-sand px-4 py-3">
+                <p className="text-sm font-semibold text-ink">{whenLabel}</p>
+                <p className="mt-1 text-xs leading-5 text-ink-soft">{summarizeBuckets(crewScore.buckets)}</p>
+              </div>
+              <CrewStatusBlock
+                title="Free"
+                tone="olive"
+                names={crewFreeNames}
+                emptyLabel="Nobody is fully clear yet."
+              />
+              <CrewStatusBlock
+                title="Blocked"
+                tone="blush"
+                names={crewScore.blockedNames}
+                emptyLabel="No one is blocked."
+              />
+              <CrewStatusBlock
+                title="Unknown"
+                tone="amber"
+                names={crewScore.unknownNames}
+                emptyLabel="Everyone has added availability."
+              />
+            </div>
+          ) : (
+            <div className="rounded-[16px] bg-sand px-4 py-4">
+              <p className="text-sm font-semibold text-ink">No date is in focus yet.</p>
+              <p className="mt-1 text-xs leading-5 text-ink-soft">
+                Add a proposed date and this sheet will show who&apos;s free, blocked, or still unknown.
+              </p>
+            </div>
+          )}
+        </Sheet>
+      ) : null}
 
       {/* Length picker sheet */}
       {editingLength ? (
@@ -1190,6 +1445,71 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 }
 
 // ─────────── small components ───────────
+
+function SheetAction({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: ReactNode
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-start gap-3 rounded-[16px] bg-sand px-4 py-3 text-left transition-colors hover:bg-sand-alt"
+    >
+      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-olive-tint text-olive">
+        {icon}
+      </span>
+      <span>
+        <span className="block text-sm font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-ink-soft">{description}</span>
+      </span>
+    </button>
+  )
+}
+
+function CrewStatusBlock({
+  title,
+  tone,
+  names,
+  emptyLabel,
+}: {
+  title: string
+  tone: 'olive' | 'blush' | 'amber'
+  names: string[]
+  emptyLabel: string
+}) {
+  const toneClasses = tone === 'olive'
+    ? 'bg-olive-tint text-olive'
+    : tone === 'blush'
+      ? 'bg-blush-tint text-blush'
+      : 'bg-amber-tint text-amber'
+
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">
+        {title} {names.length > 0 ? `(${names.length})` : ''}
+      </p>
+      {names.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {names.map((person) => (
+            <span key={person} className={`rounded-full px-2.5 py-1 text-xs font-medium ${toneClasses}`}>
+              {person}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs leading-5 text-ink-soft">{emptyLabel}</p>
+      )}
+    </div>
+  )
+}
 
 function DetailRow({
   icon,

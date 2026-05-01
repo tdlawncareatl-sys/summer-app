@@ -158,6 +158,10 @@ export const ShareIcon = (p: IconProps) => (
   <svg {...base(p)}><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6"/></svg>
 )
 
+export const CopyIcon = (p: IconProps) => (
+  <svg {...base(p)}><rect x="9" y="9" width="10" height="12" rx="2"/><path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+)
+
 export const NoteIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="M5 5h11l3 3v11H5z"/><path d="M9 12h7M9 15.5h5"/></svg>
 )

@@ -14,7 +14,7 @@ import { useName } from '@/lib/useName'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from '../components/icons'
-import { densityForDay } from '@/lib/availability'
+import { conflictingDatesForOptions, densityForDay } from '@/lib/availability'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_LABELS = ['S','M','T','W','T','F','S']
@@ -144,12 +144,15 @@ export default function AvailabilityPage() {
     const { data: events } = await supabase.from('events').select('id, title').eq('status', 'planning')
     if (!events || events.length === 0) { setEventConflicts([]); return }
     const { data: options } = await supabase
-      .from('date_options').select('event_id, date')
+      .from('date_options').select('event_id, date, end_date')
       .in('event_id', events.map((e) => e.id))
     const conflicts: EventConflict[] = []
     for (const ev of events) {
-      const evDates = (options ?? []).filter((o) => o.event_id === ev.id).map((o) => o.date)
-      const conflicting = evDates.filter((d) => blackouts.has(d) && d >= todayISO)
+      const conflicting = conflictingDatesForOptions(
+        (options ?? []).filter((o) => o.event_id === ev.id),
+        blackouts,
+        todayISO,
+      )
       if (conflicting.length > 0) conflicts.push({ id: ev.id, title: ev.title, conflictingDates: conflicting.sort() })
     }
     setEventConflicts(conflicts)
