@@ -7,6 +7,102 @@ export const size = {
 
 export const contentType = 'image/png'
 
+function BrandMark({ scale = 1 }: { scale?: number }) {
+  const sunSize = 52 * scale
+  const rayLength = 16 * scale
+  const rayWidth = 5 * scale
+  const waveWidth = 78 * scale
+  const waveHeight = 10 * scale
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12 * scale,
+      }}
+    >
+      <div
+        style={{
+          width: 96 * scale,
+          height: 88 * scale,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: sunSize,
+            height: sunSize,
+            borderRadius: 999,
+            border: `${6 * scale}px solid #ef9a3d`,
+            background: '#fffaf3',
+          }}
+        />
+        {[
+          { top: 0, left: 48 * scale - rayWidth / 2, rotate: 0 },
+          { top: 14 * scale, left: 12 * scale, rotate: -45 },
+          { top: 14 * scale, right: 12 * scale, rotate: 45 },
+          { top: 41 * scale, left: 0, rotate: -90 },
+          { top: 41 * scale, right: 0, rotate: 90 },
+        ].map((ray, index) => (
+          <div
+            key={index}
+            style={{
+              position: 'absolute',
+              width: rayWidth,
+              height: rayLength,
+              borderRadius: 999,
+              background: '#ef9a3d',
+              ...(ray.top !== undefined ? { top: ray.top } : {}),
+              ...(ray.left !== undefined ? { left: ray.left } : {}),
+              ...(ray.right !== undefined ? { right: ray.right } : {}),
+              transform: `rotate(${ray.rotate}deg)`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8 * scale,
+          marginTop: -6 * scale,
+        }}
+      >
+        <div
+          style={{
+            width: waveWidth,
+            height: waveHeight,
+            borderRadius: 999,
+            border: `${4 * scale}px solid #338ea6`,
+            borderLeftColor: 'transparent',
+            borderRightColor: 'transparent',
+            borderBottomColor: 'transparent',
+          }}
+        />
+        <div
+          style={{
+            width: waveWidth - 10 * scale,
+            height: waveHeight,
+            borderRadius: 999,
+            border: `${4 * scale}px solid #338ea6`,
+            borderLeftColor: 'transparent',
+            borderRightColor: 'transparent',
+            borderBottomColor: 'transparent',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function Icon() {
   return new ImageResponse(
     (
@@ -17,58 +113,23 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#f8f4ee',
+          background: 'linear-gradient(180deg, #fcf8f2 0%, #f3ede4 100%)',
         }}
       >
         <div
           style={{
-            width: 156,
-            height: 156,
+            width: 154,
+            height: 154,
             borderRadius: 42,
             background: '#fffdfa',
-            border: '3px solid #d7ccb9',
+            border: '3px solid #dfd2c2',
+            boxShadow: '0 12px 32px rgba(60, 47, 34, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            position: 'relative',
-            boxShadow: '0 10px 30px rgba(60, 47, 34, 0.08)',
           }}
         >
-          <div style={{ position: 'absolute', top: 34, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 999,
-                border: '7px solid #f0a347',
-                borderBottom: 'none',
-                position: 'relative',
-              }}
-            >
-              <div style={{ position: 'absolute', left: -20, top: 10, width: 12, height: 4, borderRadius: 999, background: '#f0a347', transform: 'rotate(-35deg)' }} />
-              <div style={{ position: 'absolute', right: -20, top: 10, width: 12, height: 4, borderRadius: 999, background: '#f0a347', transform: 'rotate(35deg)' }} />
-              <div style={{ position: 'absolute', top: -16, left: 16, width: 4, height: 12, borderRadius: 999, background: '#f0a347' }} />
-            </div>
-            <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
-              <div style={{ width: 36, height: 6, borderRadius: 999, background: '#2f8ba1' }} />
-              <div style={{ width: 36, height: 6, borderRadius: 999, background: '#2f8ba1' }} />
-            </div>
-            <div
-              style={{
-                marginTop: 18,
-                color: '#6b7444',
-                fontSize: 32,
-                fontWeight: 700,
-                letterSpacing: '-0.06em',
-                fontFamily: 'sans-serif',
-              }}
-            >
-              SP
-            </div>
-          </div>
+          <BrandMark />
         </div>
       </div>
     ),

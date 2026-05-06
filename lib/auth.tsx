@@ -25,9 +25,12 @@ type AuthContextValue = {
   profile: AppProfile | null
   loading: boolean
   pendingProfile: boolean
+  pendingEmail: string
   authMessage: string | null
   authError: string | null
-  signInWithEmail: (email: string) => Promise<void>
+  requestEmailCode: (email: string) => Promise<void>
+  verifyEmailCode: (email: string, code: string) => Promise<void>
+  clearPendingEmail: () => void
   completeProfile: (name: string) => Promise<void>
   updateDisplayName: (name: string) => Promise<void>
   signOut: () => Promise<void>
@@ -54,14 +57,28 @@ async function loadProfileForEmail(email: string): Promise<UserRow | null> {
   return data
 }
 
+const PENDING_EMAIL_KEY = 'summer-app-pending-email'
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null)
   const [profile, setProfile] = useState<AppProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [pendingProfile, setPendingProfile] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState('')
   const [authMessage, setAuthMessage] = useState<string | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+
+  function storePendingEmail(email: string) {
+    setPendingEmail(email)
+    if (typeof window !== 'undefined') {
+      if (email) {
+        window.localStorage.setItem(PENDING_EMAIL_KEY, email)
+      } else {
+        window.localStorage.removeItem(PENDING_EMAIL_KEY)
+      }
+    }
+  }
 
   async function syncFromSession(nextSession: Session | null) {
     setSession(nextSession)
@@ -70,6 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!nextSession?.user?.email) {
       setProfile(null)
       setPendingProfile(false)
+      if (typeof window !== 'undefined') {
+        const storedEmail = window.localStorage.getItem(PENDING_EMAIL_KEY) ?? ''
+        setPendingEmail(storedEmail)
+      }
       setLoading(false)
       return
     }
@@ -78,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextProfile = await loadProfileForEmail(nextSession.user.email)
       setProfile(nextProfile)
       setPendingProfile(!nextProfile)
+      storePendingEmail('')
+      setAuthMessage(null)
       setAuthError(null)
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Could not load your profile.')
@@ -88,6 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+
+    if (typeof window !== 'undefined') {
+      setPendingEmail(window.localStorage.getItem(PENDING_EMAIL_KEY) ?? '')
+    }
 
     supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return
@@ -112,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function signInWithEmail(email: string) {
+  async function requestEmailCode(email: string) {
     const trimmed = email.trim().toLowerCase()
     if (!trimmed) return
 
@@ -134,7 +161,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error
     }
 
-    setAuthMessage(`Magic link sent to ${trimmed}. Open it on this device to finish signing in.`)
+    storePendingEmail(trimmed)
+    setAuthMessage(`Code sent to ${trimmed}. Enter the 6-digit code here to finish signing in.`)
+  }
+
+  async function verifyEmailCode(email: string, code: string) {
+    const trimmedEmail = email.trim().toLowerCase()
+    const trimmedCode = code.replace(/\s+/g, '')
+    if (!trimmedEmail || !trimmedCode) return
+
+    setAuthError(null)
+    setAuthMessage(null)
+
+    const { error } = await supabase.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedCode,
+      type: 'email',
+    })
+
+    if (error) {
+      setAuthError(error.message)
+      throw error
+    }
+  }
+
+  function clearPendingEmail() {
+    storePendingEmail('')
+    setAuthMessage(null)
+    setAuthError(null)
   }
 
   async function completeProfile(name: string) {
@@ -239,14 +293,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     loading,
     pendingProfile,
+    pendingEmail,
     authMessage,
     authError,
-    signInWithEmail,
+    requestEmailCode,
+    verifyEmailCode,
+    clearPendingEmail,
     completeProfile,
     updateDisplayName,
     signOut,
     refreshProfile,
-  }), [session, authUser, profile, loading, pendingProfile, authMessage, authError])
+  }), [session, authUser, profile, loading, pendingProfile, pendingEmail, authMessage, authError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

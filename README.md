@@ -10,6 +10,37 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Auth Setup
+
+Summer Plans now supports an in-app email code flow that works much better for iPhone Home Screen installs
+than magic links.
+
+The app code is ready for OTP entry, but Supabase must be switched from link-style emails to code-style emails:
+
+1. In Supabase, open `Authentication -> Email Templates`
+2. Edit the `Magic Link` template
+3. Replace the link-focused content with an OTP-focused template that uses `{{ .Token }}`
+
+Example:
+
+```html
+<h2>Your Summer Plans sign-in code</h2>
+<p>Enter this code in the app:</p>
+<p style="font-size:32px;font-weight:700;letter-spacing:0.18em;">{{ .Token }}</p>
+```
+
+Supabase sends email OTP and magic link requests through the same `signInWithOtp` API.
+If the template contains `{{ .Token }}`, users receive a 6-digit code. If it contains
+`{{ .ConfirmationURL }}`, they receive a link instead.
+
+For production auth delivery to your friend group, configure custom SMTP in Supabase:
+
+1. Open `Authentication -> SMTP Settings`
+2. Add your SMTP host, port, username, and password
+3. Set a real sender address you control
+
+Until custom SMTP is configured, Supabase default mail delivery is not a production-grade setup.
+
 ## Test Commands
 
 ```bash

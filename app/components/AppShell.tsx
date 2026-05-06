@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import BottomNav from './BottomNav'
 import { useAuth } from '@/lib/auth'
 
@@ -11,21 +11,44 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     profile,
     pendingProfile,
     authUser,
+    pendingEmail,
     authMessage,
     authError,
-    signInWithEmail,
+    requestEmailCode,
+    verifyEmailCode,
+    clearPendingEmail,
     completeProfile,
   } = useAuth()
 
-  const [email, setEmail] = useState(authUser?.email ?? '')
+  const [email, setEmail] = useState(authUser?.email ?? pendingEmail ?? '')
+  const [code, setCode] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  async function handleEmailSignIn() {
+  const activeEmail = email.trim() || pendingEmail
+  const expectingCode = Boolean(pendingEmail)
+
+  useEffect(() => {
+    if (pendingEmail) {
+      setEmail(pendingEmail)
+    }
+  }, [pendingEmail])
+
+  async function handleEmailCodeRequest() {
     if (!email.trim() || submitting) return
     setSubmitting(true)
     try {
-      await signInWithEmail(email)
+      await requestEmailCode(email)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleCodeVerify() {
+    if (!activeEmail || !code.trim() || submitting) return
+    setSubmitting(true)
+    try {
+      await verifyEmailCode(activeEmail, code)
     } finally {
       setSubmitting(false)
     }
@@ -63,7 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               Sign in to Summer Plans
             </h1>
             <p className="mt-3 text-sm leading-6 text-ink-soft">
-              Use your email and we&apos;ll send you a magic link. No password to remember.
+              Use your email and we&apos;ll send you a sign-in code. No password to remember.
             </p>
           </div>
 
@@ -80,14 +103,52 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="mt-2 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
             />
             <button
-              onClick={handleEmailSignIn}
+              onClick={handleEmailCodeRequest}
               disabled={!email.trim() || submitting}
               className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
             >
-              {submitting ? 'Sending link…' : 'Send sign-in link'}
+              {submitting ? 'Sending code…' : expectingCode ? 'Resend code' : 'Email me a code'}
             </button>
+            {expectingCode && (
+              <div className="mt-4 rounded-[18px] bg-sand-alt p-4">
+                <label className="block text-xs font-bold uppercase tracking-[0.18em] text-ink-mute">
+                  6-digit code
+                </label>
+                <input
+                  type="text"
+                  aria-label="6-digit code"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D+/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  autoComplete="one-time-code"
+                  className="mt-2 w-full rounded-[16px] border-0 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.32em] text-ink focus:outline-none focus:ring-2 focus:ring-olive"
+                />
+                <button
+                  onClick={handleCodeVerify}
+                  disabled={code.trim().length < 6 || submitting}
+                  className="mt-3 w-full rounded-[16px] bg-ink py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+                >
+                  {submitting ? 'Checking code…' : 'Verify code'}
+                </button>
+                <button
+                  onClick={() => {
+                    clearPendingEmail()
+                    setCode('')
+                    setEmail('')
+                  }}
+                  className="mt-3 text-xs font-semibold text-olive"
+                >
+                  Use a different email
+                </button>
+              </div>
+            )}
             <p className="mt-3 text-xs leading-5 text-ink-soft">
-              Open the link from your email on this device to finish signing in.
+              Best for iPhone Home Screen use: stay in the app, check your email, then type the code back here.
+            </p>
+            <p className="mt-2 text-[11px] leading-5 text-ink-mute">
+              If your email still shows a sign-in link instead of a code, open that link on this device while we finish the switch.
             </p>
             {authMessage && (
               <p className="mt-3 rounded-[16px] bg-olive-soft px-3 py-2 text-xs font-medium text-olive">
