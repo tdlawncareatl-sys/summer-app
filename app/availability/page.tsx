@@ -5,11 +5,13 @@
 //  - My Blocks: list view of your future blackouts + event conflicts.
 //  - Group: heatmap of when the crew is collectively blocked.
 //
-// Restyled to the earthy baseline. Logic unchanged.
+// Restyled to the earthy baseline. Logic now includes multi-day conflict
+// handling and persistence feedback.
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
+import { toLocalISODate } from '@/lib/date'
 import { useName } from '@/lib/useName'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
@@ -25,7 +27,7 @@ function getRange(a: string, b: string): string[] {
   const [s, e] = start <= end ? [start, end] : [end, start]
   const days: string[] = []
   const cur = new Date(s)
-  while (cur <= e) { days.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1) }
+  while (cur <= e) { days.push(toLocalISODate(cur)); cur.setDate(cur.getDate() + 1) }
   return days
 }
 
@@ -66,13 +68,13 @@ function collapseToRanges(records: BlackoutRecord[]): DateRange[] {
 
 export default function AvailabilityPage() {
   const today = new Date()
-  const todayISO = today.toISOString().split('T')[0]
+  const todayISO = toLocalISODate(today)
 
   const [name] = useName()
   const [userId, setUserId] = useState<string | null>(null)
   const [blackouts, setBlackouts] = useState<Set<string>>(new Set())
   const [blackoutRecords, setBlackoutRecords] = useState<BlackoutRecord[]>([])
-  const [saved, setSaved] = useState(false)
+  const [statusNotice, setStatusNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
   const [previewDays, setPreviewDays] = useState<Set<string>>(new Set())
@@ -92,14 +94,48 @@ export default function AvailabilityPage() {
   const [clearingAll, setClearingAll] = useState(false)
 
   const drag = useRef<{ mode: 'add' | 'remove'; start: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (!name) return
     setBlackouts(new Set())
     setBlackoutRecords([])
     setUserId(null)
+    clearNotice()
     loadUser(name)
   }, [name])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current && typeof window !== 'undefined') {
+        window.clearTimeout(noticeTimer.current)
+      }
+    }
+  }, [])
+
+  function clearNotice() {
+    if (noticeTimer.current && typeof window !== 'undefined') {
+      window.clearTimeout(noticeTimer.current)
+      noticeTimer.current = null
+    }
+    setStatusNotice(null)
+  }
+
+  function showNotice(text: string, tone: 'success' | 'error') {
+    if (noticeTimer.current && typeof window !== 'undefined') {
+      window.clearTimeout(noticeTimer.current)
+      noticeTimer.current = null
+    }
+
+    setStatusNotice({ tone, text })
+
+    if (tone === 'success' && typeof window !== 'undefined') {
+      noticeTimer.current = window.setTimeout(() => {
+        setStatusNotice((current) => (current?.tone === 'success' ? null : current))
+        noticeTimer.current = null
+      }, 2200)
+    }
+  }
 
   useEffect(() => {
     if (viewMode === 'group') loadGroupBlackouts()
@@ -111,12 +147,18 @@ export default function AvailabilityPage() {
   }, [blackouts]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadUser(n: string) {
-    const uid = await ensureUser(n)
-    setUserId(uid)
-    const { data } = await supabase.from('availability').select('date, category').eq('user_id', uid)
-    if (data) {
-      setBlackoutRecords(data)
-      setBlackouts(new Set(data.map((r) => r.date)))
+    try {
+      const uid = await ensureUser(n)
+      const { data, error } = await supabase.from('availability').select('date, category').eq('user_id', uid)
+      if (error) throw error
+      setUserId(uid)
+      setBlackoutRecords(data ?? [])
+      setBlackouts(new Set((data ?? []).map((r) => r.date)))
+    } catch (error) {
+      setUserId(null)
+      setBlackoutRecords([])
+      setBlackouts(new Set())
+      showNotice(error instanceof Error ? error.message : 'Could not load your blocked dates.', 'error')
     }
   }
 
@@ -141,21 +183,28 @@ export default function AvailabilityPage() {
 
   async function loadEventConflicts() {
     if (!userId) return
-    const { data: events } = await supabase.from('events').select('id, title').eq('status', 'planning')
-    if (!events || events.length === 0) { setEventConflicts([]); return }
-    const { data: options } = await supabase
-      .from('date_options').select('event_id, date, end_date')
-      .in('event_id', events.map((e) => e.id))
-    const conflicts: EventConflict[] = []
-    for (const ev of events) {
-      const conflicting = conflictingDatesForOptions(
-        (options ?? []).filter((o) => o.event_id === ev.id),
-        blackouts,
-        todayISO,
-      )
-      if (conflicting.length > 0) conflicts.push({ id: ev.id, title: ev.title, conflictingDates: conflicting.sort() })
+    try {
+      const { data: events, error: eventsError } = await supabase.from('events').select('id, title').eq('status', 'planning')
+      if (eventsError) throw eventsError
+      if (!events || events.length === 0) { setEventConflicts([]); return }
+      const { data: options, error: optionsError } = await supabase
+        .from('date_options').select('event_id, date, end_date')
+        .in('event_id', events.map((e) => e.id))
+      if (optionsError) throw optionsError
+      const conflicts: EventConflict[] = []
+      for (const ev of events) {
+        const conflicting = conflictingDatesForOptions(
+          (options ?? []).filter((o) => o.event_id === ev.id),
+          blackouts,
+          todayISO,
+        )
+        if (conflicting.length > 0) conflicts.push({ id: ev.id, title: ev.title, conflictingDates: conflicting.sort() })
+      }
+      setEventConflicts(conflicts)
+    } catch (error) {
+      setEventConflicts([])
+      showNotice(error instanceof Error ? error.message : 'Could not refresh event conflicts.', 'error')
     }
-    setEventConflicts(conflicts)
   }
 
   function startDrag(iso: string) {
@@ -179,23 +228,38 @@ export default function AvailabilityPage() {
     if (mode === 'remove') {
       const toRemove = days.filter((d) => blackouts.has(d))
       if (toRemove.length) {
-        await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
+        clearNotice()
+        const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
+        if (error) {
+          showNotice(error.message || 'Could not remove those blocked dates.', 'error')
+          return
+        }
         const newBlackouts = new Set(blackouts)
         toRemove.forEach((d) => newBlackouts.delete(d))
         setBlackouts(newBlackouts)
         setBlackoutRecords((prev) => prev.filter((r) => !toRemove.includes(r.date)))
+        showNotice(toRemove.length === 1 ? 'Date unblocked.' : `${toRemove.length} blocked dates removed.`, 'success')
       }
-      setSaved(true); setTimeout(() => setSaved(false), 2000)
     } else {
       const toAdd = days.filter((d) => !blackouts.has(d))
-      if (toAdd.length) { setPendingDays(toAdd); setPendingLabel('') }
+      if (toAdd.length) {
+        clearNotice()
+        setPendingDays(toAdd)
+        setPendingLabel('')
+      }
     }
   }
 
   async function saveWithCategory(category: string | null) {
     if (!pendingDays || !userId) return
     setSavingCategory(true)
-    await supabase.from('availability').insert(pendingDays.map((date) => ({ user_id: userId, date, category })))
+    clearNotice()
+    const { error } = await supabase.from('availability').insert(pendingDays.map((date) => ({ user_id: userId, date, category })))
+    if (error) {
+      setSavingCategory(false)
+      showNotice(error.message || 'Could not save your blocked dates.', 'error')
+      return
+    }
     const newBlackouts = new Set(blackouts)
     pendingDays.forEach((d) => newBlackouts.add(d))
     setBlackouts(newBlackouts)
@@ -205,18 +269,25 @@ export default function AvailabilityPage() {
     ])
     setPendingDays(null)
     setSavingCategory(false)
-    setSaved(true); setTimeout(() => setSaved(false), 2000)
+    showNotice(pendingDays.length === 1 ? 'Date blocked.' : `${pendingDays.length} dates blocked.`, 'success')
   }
 
   async function removeRange(range: DateRange) {
     if (!userId) return
     setRemovingRange(range.start)
-    await supabase.from('availability').delete().eq('user_id', userId).in('date', range.days)
+    clearNotice()
+    const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', range.days)
+    if (error) {
+      setRemovingRange(null)
+      showNotice(error.message || 'Could not remove that blocked range.', 'error')
+      return
+    }
     const newBlackouts = new Set(blackouts)
     range.days.forEach((d) => newBlackouts.delete(d))
     setBlackouts(newBlackouts)
     setBlackoutRecords((prev) => prev.filter((r) => !range.days.includes(r.date)))
     setRemovingRange(null)
+    showNotice(range.days.length === 1 ? 'Date unblocked.' : `${range.days.length} blocked dates removed.`, 'success')
   }
 
   async function clearAllFuture() {
@@ -224,11 +295,18 @@ export default function AvailabilityPage() {
     setClearingAll(true)
     const futureDates = [...blackouts].filter((d) => d >= todayISO)
     if (futureDates.length) {
-      await supabase.from('availability').delete().eq('user_id', userId).in('date', futureDates)
+      clearNotice()
+      const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', futureDates)
+      if (error) {
+        setClearingAll(false)
+        showNotice(error.message || 'Could not clear your future blocked dates.', 'error')
+        return
+      }
       const newBlackouts = new Set(blackouts)
       futureDates.forEach((d) => newBlackouts.delete(d))
       setBlackouts(newBlackouts)
       setBlackoutRecords((prev) => prev.filter((r) => r.date < todayISO))
+      showNotice('Future blocked dates cleared.', 'success')
     }
     setClearingAll(false)
   }
@@ -338,6 +416,19 @@ export default function AvailabilityPage() {
         ))}
       </div>
 
+      {statusNotice && (
+        <div
+          className={[
+            'mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium',
+            statusNotice.tone === 'success'
+              ? 'border-olive/15 bg-olive/10 text-olive'
+              : 'border-blush/20 bg-blush-soft text-blush',
+          ].join(' ')}
+        >
+          {statusNotice.text}
+        </div>
+      )}
+
       {/* ── CALENDAR ── */}
       {viewMode === 'mine' && (
         <>
@@ -349,7 +440,6 @@ export default function AvailabilityPage() {
                 <p className="text-sm text-ink-soft">
                   <span className="font-bold text-blush">{blackouts.size}</span> date{blackouts.size !== 1 ? 's' : ''} blocked
                 </p>
-                {saved && <span className="text-xs font-semibold text-olive">Saved ✓</span>}
               </div>
 
               <Card padded={false} className="overflow-hidden">

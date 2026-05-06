@@ -2,6 +2,8 @@
 // Home / Calendar / Me / Ideas all need overlapping slices of this.
 
 import { supabase } from './supabase'
+import { toLocalISODate, todayLocalISO } from './date'
+import { compareRankedDateOptions } from './dateOptionRanking'
 import { EventStatus, inferEventStatus } from './status'
 
 export type UserRow = { id: string; name: string }
@@ -103,15 +105,17 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
     ;(optionsByEvent[opt.event_id] ??= []).push(opt)
   }
 
-  const votesByOption: Record<string, number> = {}
+  const votesByOption: Record<string, RawVote[]> = {}
+  const voteCountByOption: Record<string, number> = {}
   for (const v of (votes ?? []) as RawVote[]) {
-    votesByOption[v.date_option_id] = (votesByOption[v.date_option_id] ?? 0) + 1
+    ;(votesByOption[v.date_option_id] ??= []).push(v)
+    voteCountByOption[v.date_option_id] = (voteCountByOption[v.date_option_id] ?? 0) + 1
   }
 
   // Enrich events
   const enriched: EnrichedEvent[] = ((events ?? []) as RawEvent[]).map((ev) => {
     const opts = optionsByEvent[ev.id] ?? []
-    const voteCount = opts.reduce((sum, o) => sum + (votesByOption[o.id] ?? 0), 0)
+    const voteCount = opts.reduce((sum, o) => sum + (voteCountByOption[o.id] ?? 0), 0)
     const displayStatus = inferEventStatus({
       status: ev.status,
       hasDateOptions: opts.length > 0,
@@ -119,13 +123,28 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
       createdByCurrentUser: !!myName && ev.created_by === myName,
     })
 
-    // Decide the "top" date — confirmed if present, otherwise earliest proposed
+    const rankedOptions = opts
+      .map((option) => {
+        const totalPoints = (votesByOption[option.id] ?? []).reduce((sum, vote) => sum + vote.points, 0)
+        const blockedNames = new Set<string>()
+        for (const day of daysBetween(option.date, option.end_date ?? option.date)) {
+          ;(blackoutsByDate[day] ?? []).forEach((name) => blockedNames.add(name))
+        }
+        return {
+          ...option,
+          totalPoints,
+          blockedCount: blockedNames.size,
+          conflictScore: totalPoints - blockedNames.size * 2,
+        }
+      })
+      .sort(compareRankedDateOptions)
+
+    // Decide the "top" date — confirmed if present, otherwise the current leading option.
     let topDate: string | null = ev.confirmed_date ?? null
     let topEndDate: string | null = ev.confirmed_end_date ?? null
-    if (!topDate && opts.length > 0) {
-      const sorted = [...opts].sort((a, b) => a.date.localeCompare(b.date))
-      topDate = sorted[0].date
-      topEndDate = sorted[0].end_date ?? null
+    if (!topDate && rankedOptions.length > 0) {
+      topDate = rankedOptions[0].date
+      topEndDate = rankedOptions[0].end_date ?? null
     }
 
     // Availability across the winning dates (for display)
@@ -168,7 +187,7 @@ function daysBetween(startIso: string, endIso: string | null | undefined): strin
   const cur = new Date(startIso + 'T12:00:00')
   const end = new Date(endIso + 'T12:00:00')
   while (cur <= end) {
-    out.push(cur.toISOString().split('T')[0])
+    out.push(toLocalISODate(cur))
     cur.setDate(cur.getDate() + 1)
   }
   return out
@@ -192,5 +211,5 @@ export function formatDateRangeShort(start: string, end?: string | null): string
 }
 
 export function todayISO() {
-  return new Date().toISOString().split('T')[0]
+  return todayLocalISO()
 }

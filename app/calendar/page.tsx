@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
+import { toLocalISODate } from '@/lib/date'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import { STATUS, type EventStatus } from '@/lib/status'
 import PageHeader from '../components/PageHeader'
@@ -291,7 +292,7 @@ function MonthView({
   const cells = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(firstGridDay)
     date.setDate(firstGridDay.getDate() + index)
-    const iso = date.toISOString().split('T')[0]
+    const iso = toLocalISODate(date)
     return {
       iso,
       day: date.getDate(),
@@ -505,7 +506,7 @@ function daysBetween(start: string, end: string | null | undefined) {
   const current = new Date(start + 'T12:00:00')
   const stop = new Date(end + 'T12:00:00')
   while (current <= stop) {
-    output.push(current.toISOString().split('T')[0])
+    output.push(toLocalISODate(current))
     current.setDate(current.getDate() + 1)
   }
   return output
@@ -533,7 +534,7 @@ function buildWeek(start: Date) {
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start)
     date.setDate(start.getDate() + index)
-    return date.toISOString().split('T')[0]
+    return toLocalISODate(date)
   })
 }
 

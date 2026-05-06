@@ -8,6 +8,7 @@
 // (any date, past or future). Treating no-rows as "unknown" prevents the page from
 // claiming "12/12 free" when nobody has actually opened the app yet.
 
+import { toLocalISODate } from './date'
 import { LengthType, normalizeLengthDays, scheduledDays } from './lengthType'
 
 export type Participant = { id: string; name: string }
@@ -41,7 +42,7 @@ export function getRange(startISO: string, endISO: string): string[] {
   const out: string[] = []
   const cur = new Date(s)
   while (cur <= e) {
-    out.push(cur.toISOString().split('T')[0])
+    out.push(toLocalISODate(cur))
     cur.setDate(cur.getDate() + 1)
   }
   return out
@@ -113,9 +114,9 @@ export function findBestRanges(
       const d = new Date(start)
       d.setDate(start.getDate() + i)
       if (d.getDay() !== 5) continue // Fridays only
-      const startDate = d.toISOString().split('T')[0]
+      const startDate = toLocalISODate(d)
       d.setDate(d.getDate() + 2)
-      const endDate = d.toISOString().split('T')[0]
+      const endDate = toLocalISODate(d)
       candidates.push({ startDate, endDate })
     }
   } else if (spanDays > 1) {
@@ -125,15 +126,15 @@ export function findBestRanges(
       const endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + spanDays - 1)
       candidates.push({
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
+        startDate: toLocalISODate(startDate),
+        endDate: toLocalISODate(endDate),
       })
     }
   } else {
     for (let i = 1; i <= horizonDays; i++) {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
-      const iso = d.toISOString().split('T')[0]
+      const iso = toLocalISODate(d)
       candidates.push({ startDate: iso, endDate: iso })
     }
   }

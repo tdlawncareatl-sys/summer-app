@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
+import { toLocalISODate } from '@/lib/date'
+import { compareRankedDateOptions } from '@/lib/dateOptionRanking'
 import {
   buildAppleMapsUrl,
   eventDraftFromRecord,
@@ -164,7 +166,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const calCardRef = useRef<HTMLDivElement | null>(null)
 
   const today = useMemo(() => new Date(), [])
-  const todayISO = today.toISOString().split('T')[0]
+  const todayISO = toLocalISODate(today)
   const [calYear, setCalYear] = useState(today.getFullYear())
   const [calMonth, setCalMonth] = useState(today.getMonth())
 
@@ -255,10 +257,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
     })
 
-    enriched.sort((a, b) => {
-      if (b.conflictScore !== a.conflictScore) return b.conflictScore - a.conflictScore
-      return a.blockedCount - b.blockedCount
-    })
+    enriched.sort(compareRankedDateOptions)
     setDateOptions(enriched)
     setLoadingEvent(false)
   }
