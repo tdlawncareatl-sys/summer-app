@@ -1,26 +1,37 @@
 export type NotificationTone = 'olive' | 'terracotta' | 'amber'
+export type NotificationType = 'event_confirmed' | 'event_reminder' | 'vote_needed'
+export type ReminderTiming = 'smart' | 'day_before' | 'week_before' | 'none'
 
-export type NotificationItem = {
-  id: string
-  type: 'confirmed' | 'vote-activity' | 'vote-needed' | 'idea'
+export type NotificationPreferences = {
+  confirmedEnabled: boolean
+  voteNeededEnabled: boolean
+  reminderTiming: ReminderTiming
+}
+
+export type NotificationPlan = {
+  userId: string
+  eventId: string
+  type: NotificationType
+  tone: NotificationTone
   title: string
   body: string
   href: string
-  timestamp: string
-  tone: NotificationTone
+  dedupeKey: string
+  scheduledFor: string
 }
 
-export type EventRow = {
+export type NotificationEventRow = {
   id: string
   title: string
   status: string
-  created_by: string | null
   created_at: string
+  confirmed_at?: string | null
   confirmed_date?: string | null
   confirmed_end_date?: string | null
+  location_name?: string | null
 }
 
-export type DateOptionRow = {
+export type NotificationDateOptionRow = {
   id: string
   event_id: string
   date: string
@@ -28,123 +39,227 @@ export type DateOptionRow = {
   created_at: string
 }
 
-export type VoteRow = {
+export type NotificationVoteRow = {
   id: string
   date_option_id: string
   user_id: string
   created_at: string
 }
 
-export type IdeaRow = {
+export type NotificationUserRow = {
   id: string
-  title: string
-  submitted_by: string | null
-  likes: number
-  created_at: string
+  name: string
 }
 
-function maxIso(...values: Array<string | null | undefined>) {
-  return values.filter(Boolean).sort().at(-1) ?? new Date(0).toISOString()
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  confirmedEnabled: true,
+  voteNeededEnabled: true,
+  reminderTiming: 'smart',
+}
+
+const MORNING_UTC_HOUR = 13
+const CONFIRM_NOTIFICATION_WINDOW_MS = 1000 * 60 * 60 * 24 * 7
+
+function parseCalendarDate(iso: string) {
+  const [year, month, day] = iso.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+}
+
+function toCalendarISO(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function shiftCalendarDate(iso: string, deltaDays: number) {
+  const date = parseCalendarDate(iso)
+  date.setUTCDate(date.getUTCDate() + deltaDays)
+  return toCalendarISO(date)
+}
+
+function scheduledIsoForDay(iso: string) {
+  return `${iso}T${String(MORNING_UTC_HOUR).padStart(2, '0')}:00:00.000Z`
+}
+
+function dayDiffInclusive(start: string, end?: string | null) {
+  const startDate = parseCalendarDate(start)
+  const endDate = parseCalendarDate(end ?? start)
+  return Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1
 }
 
 function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', opts ?? { weekday: 'short', month: 'short', day: 'numeric' })
+  return new Date(iso + 'T12:00:00').toLocaleDateString(
+    'en-US',
+    opts ?? { weekday: 'short', month: 'short', day: 'numeric' },
+  )
 }
 
-function formatDateRangeShort(start: string, end?: string | null): string {
+function formatDateRangeShort(start: string, end?: string | null) {
   if (!end || end === start) return formatDate(start, { weekday: 'short', month: 'short', day: 'numeric' })
   return `${formatDate(start, { month: 'short', day: 'numeric' })} – ${formatDate(end, { month: 'short', day: 'numeric' })}`
 }
 
-export function buildNotifications(input: {
-  userId: string
-  name: string
-  events: EventRow[]
-  dateOptions: DateOptionRow[]
-  votes: VoteRow[]
-  ideas: IdeaRow[]
-  now?: number
-}): NotificationItem[] {
-  const optionsByEvent: Record<string, DateOptionRow[]> = {}
-  for (const option of input.dateOptions) {
-    ;(optionsByEvent[option.event_id] ??= []).push(option)
+function normalizePreferences(preferences?: Partial<NotificationPreferences> | null): NotificationPreferences {
+  const reminderTiming = preferences?.reminderTiming
+  const safeReminderTiming: ReminderTiming = reminderTiming === 'day_before'
+    || reminderTiming === 'week_before'
+    || reminderTiming === 'none'
+    || reminderTiming === 'smart'
+    ? reminderTiming
+    : DEFAULT_NOTIFICATION_PREFERENCES.reminderTiming
+
+  return {
+    confirmedEnabled: preferences?.confirmedEnabled ?? DEFAULT_NOTIFICATION_PREFERENCES.confirmedEnabled,
+    voteNeededEnabled: preferences?.voteNeededEnabled ?? DEFAULT_NOTIFICATION_PREFERENCES.voteNeededEnabled,
+    reminderTiming: safeReminderTiming,
   }
+}
 
-  const votesByOption: Record<string, VoteRow[]> = {}
-  for (const vote of input.votes) {
-    ;(votesByOption[vote.date_option_id] ??= []).push(vote)
-  }
+function buildReminderMoments(event: NotificationEventRow, reminderTiming: ReminderTiming, nowIso: string) {
+  if (!event.confirmed_date || reminderTiming === 'none') return []
 
-  const notifications: NotificationItem[] = []
+  const candidates: Array<{ day: string; title: string; body: string }> = []
+  const start = event.confirmed_date
+  const end = event.confirmed_end_date ?? event.confirmed_date
+  const spanDays = dayDiffInclusive(start, end)
 
-  for (const event of input.events) {
-    const options = optionsByEvent[event.id] ?? []
-    const eventVotes = options.flatMap((option) => votesByOption[option.id] ?? [])
-    const latestVoteAt = eventVotes.map((vote) => vote.created_at).sort().at(-1)
-    const latestOptionAt = options.map((option) => option.created_at).sort().at(-1)
-    const userHasVote = eventVotes.some((vote) => vote.user_id === input.userId)
-    const isConfirmed = event.status === 'confirmed' && !!event.confirmed_date
-
-    if (isConfirmed) {
-      notifications.push({
-        id: `confirmed:${event.id}`,
-        type: 'confirmed',
-        title: `${event.title} is locked in`,
-        body: formatDateRangeShort(event.confirmed_date!, event.confirmed_end_date),
-        href: `/events/${event.id}`,
-        // Use activity timestamps, not the future event date itself, so read state
-        // reflects when the plan changed rather than when the plan happens.
-        timestamp: maxIso(latestVoteAt, latestOptionAt, event.created_at),
-        tone: 'olive',
+  if (reminderTiming === 'week_before') {
+    candidates.push({
+      day: shiftCalendarDate(start, -7),
+      title: `${event.title} is next week`,
+      body: `Coming up ${formatDateRangeShort(start, event.confirmed_end_date)}`,
+    })
+  } else if (reminderTiming === 'day_before') {
+    candidates.push({
+      day: shiftCalendarDate(start, -1),
+      title: `${event.title} is tomorrow`,
+      body: formatDateRangeShort(start, event.confirmed_end_date),
+    })
+  } else {
+    if (spanDays >= 3) {
+      candidates.push({
+        day: shiftCalendarDate(start, -7),
+        title: `${event.title} is next week`,
+        body: `Trip ahead ${formatDateRangeShort(start, event.confirmed_end_date)}`,
       })
-      continue
+      candidates.push({
+        day: shiftCalendarDate(start, -1),
+        title: `${event.title} starts tomorrow`,
+        body: formatDateRangeShort(start, event.confirmed_end_date),
+      })
+    } else {
+      const weekday = parseCalendarDate(start).getUTCDay()
+      const mondayOffset = weekday === 0 ? -6 : 1 - weekday
+      const monday = shiftCalendarDate(start, mondayOffset)
+
+      if (monday < start) {
+        candidates.push({
+          day: monday,
+          title: `${event.title} is this week`,
+          body: formatDateRangeShort(start, event.confirmed_end_date),
+        })
+      }
+
+      candidates.push({
+        day: shiftCalendarDate(start, -1),
+        title: `${event.title} is tomorrow`,
+        body: formatDateRangeShort(start, event.confirmed_end_date),
+      })
+    }
+  }
+
+  return [...new Map(
+    candidates
+      .map((candidate) => ({
+        ...candidate,
+        scheduledFor: scheduledIsoForDay(candidate.day),
+      }))
+      .filter((candidate) => candidate.scheduledFor > nowIso)
+      .map((candidate) => [candidate.scheduledFor, candidate]),
+  ).values()]
+}
+
+export function buildEventNotificationPlans(input: {
+  event: NotificationEventRow
+  users: NotificationUserRow[]
+  dateOptions: NotificationDateOptionRow[]
+  votes: NotificationVoteRow[]
+  preferencesByUserId: Record<string, NotificationPreferences | undefined>
+  actorUserId?: string | null
+  nowIso?: string
+}): NotificationPlan[] {
+  const nowIso = input.nowIso ?? new Date().toISOString()
+  const event = input.event
+  const plans: NotificationPlan[] = []
+  const href = `/events/${event.id}`
+
+  if (event.status === 'confirmed' && event.confirmed_date) {
+    for (const user of input.users) {
+      const preferences = normalizePreferences(input.preferencesByUserId[user.id])
+
+      const recentConfirmation = event.confirmed_at
+        && new Date(event.confirmed_at).getTime() >= new Date(nowIso).getTime() - CONFIRM_NOTIFICATION_WINDOW_MS
+
+      if (preferences.confirmedEnabled && event.confirmed_at && recentConfirmation && user.id !== input.actorUserId) {
+        plans.push({
+          userId: user.id,
+          eventId: event.id,
+          type: 'event_confirmed',
+          tone: 'olive',
+          title: `${event.title} is locked in`,
+          body: event.location_name?.trim()
+            ? `${formatDateRangeShort(event.confirmed_date, event.confirmed_end_date)} · ${event.location_name.trim()}`
+            : formatDateRangeShort(event.confirmed_date, event.confirmed_end_date),
+          href,
+          dedupeKey: `event-confirmed:${event.id}:${user.id}:${event.confirmed_at}`,
+          scheduledFor: event.confirmed_at,
+        })
+      }
+
+      for (const reminder of buildReminderMoments(event, preferences.reminderTiming, nowIso)) {
+        plans.push({
+          userId: user.id,
+          eventId: event.id,
+          type: 'event_reminder',
+          tone: 'olive',
+          title: reminder.title,
+          body: event.location_name?.trim()
+            ? `${reminder.body} · ${event.location_name.trim()}`
+            : reminder.body,
+          href,
+          dedupeKey: `event-reminder:${event.id}:${user.id}:${reminder.scheduledFor}`,
+          scheduledFor: reminder.scheduledFor,
+        })
+      }
     }
 
-    if (event.created_by === input.name && eventVotes.length > 0) {
-      notifications.push({
-        id: `vote-activity:${event.id}`,
-        type: 'vote-activity',
-        title: `${event.title} is getting votes`,
-        body: `${eventVotes.length} vote${eventVotes.length === 1 ? '' : 's'} across ${options.length} option${options.length === 1 ? '' : 's'}`,
-        href: `/events/${event.id}`,
-        timestamp: maxIso(latestVoteAt, event.created_at),
-        tone: 'terracotta',
-      })
-    } else if (options.length > 0 && !userHasVote) {
-      notifications.push({
-        id: `vote-needed:${event.id}`,
-        type: 'vote-needed',
-        title: `Vote on ${event.title}`,
-        body: `${options.length} date option${options.length === 1 ? '' : 's'} waiting for you`,
-        href: `/events/${event.id}`,
-        timestamp: maxIso(latestVoteAt, latestOptionAt, event.created_at),
-        tone: 'terracotta',
-      })
-    }
+    return plans
   }
 
-  const recentIdeaCutoff = (input.now ?? Date.now()) - 1000 * 60 * 60 * 24 * 7
-  for (const idea of input.ideas) {
-    if (idea.submitted_by === input.name) continue
-    const createdAt = new Date(idea.created_at).getTime()
-    const isRecent = Number.isFinite(createdAt) && createdAt >= recentIdeaCutoff
-    const isTrending = idea.likes >= 3
-    if (!isRecent && !isTrending) continue
+  if (input.dateOptions.length === 0) return plans
 
-    notifications.push({
-      id: `idea:${idea.id}`,
-      type: 'idea',
-      title: isTrending ? `${idea.title} is getting traction` : `New idea: ${idea.title}`,
-      body: isTrending
-        ? `${idea.likes} likes so far`
-        : `${idea.submitted_by ?? 'Someone'} added a new idea`,
-      href: '/ideas',
-      timestamp: idea.created_at,
-      tone: 'amber',
+  const voterIds = new Set(input.votes.map((vote) => vote.user_id))
+  const latestOptionAt = input.dateOptions
+    .map((option) => option.created_at)
+    .sort()
+    .at(-1) ?? event.created_at
+
+  for (const user of input.users) {
+    const preferences = normalizePreferences(input.preferencesByUserId[user.id])
+    if (!preferences.voteNeededEnabled) continue
+    if (user.id === input.actorUserId) continue
+    if (voterIds.has(user.id)) continue
+
+    plans.push({
+      userId: user.id,
+      eventId: event.id,
+      type: 'vote_needed',
+      tone: 'terracotta',
+      title: `Vote on ${event.title}`,
+      body: `${input.dateOptions.length} date option${input.dateOptions.length === 1 ? '' : 's'} waiting on you`,
+      href,
+      dedupeKey: `vote-needed:${event.id}:${user.id}:${latestOptionAt}`,
+      scheduledFor: latestOptionAt,
     })
   }
 
-  return notifications
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    .slice(0, 8)
+  return plans
 }

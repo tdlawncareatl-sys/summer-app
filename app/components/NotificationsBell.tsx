@@ -1,18 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth'
-import { fetchNotifications, type NotificationItem, type NotificationTone } from '@/lib/notifications'
 import {
-  isNotificationUnread,
+  fetchNotifications,
   markNotificationsRead,
-  parseNotificationReadState,
-  serializeNotificationReadState,
-  unreadNotificationCount,
-  type NotificationReadState,
-} from '@/lib/notificationReadState'
-import { BellIcon, CheckIcon, LightbulbIcon, StarIcon, CalendarIcon, XIcon } from './icons'
+  syncAllNotifications,
+  type NotificationItem,
+  type NotificationTone,
+} from '@/lib/notifications'
+import { BellIcon, CalendarIcon, CheckIcon, LightbulbIcon, StarIcon, XIcon } from './icons'
 
 const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
   olive: {
@@ -29,13 +27,13 @@ const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
   },
 }
 
-const LAST_SEEN_PREFIX = 'summer-app-notifications-seen'
+const BOOTSTRAP_PREFIX = 'summer-app-notifications-bootstrapped'
 
 function iconFor(item: NotificationItem) {
-  if (item.type === 'confirmed') return CheckIcon
-  if (item.type === 'idea') return LightbulbIcon
-  if (item.type === 'vote-needed') return CalendarIcon
-  return StarIcon
+  if (item.type === 'event_confirmed') return CheckIcon
+  if (item.type === 'event_reminder') return CalendarIcon
+  if (item.type === 'vote_needed') return StarIcon
+  return LightbulbIcon
 }
 
 function formatWhen(iso: string) {
@@ -57,10 +55,6 @@ export default function NotificationsBell() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<NotificationItem[]>([])
-  const [readState, setReadState] = useState<NotificationReadState>({
-    lastSeenAt: null,
-    seenSignatures: [],
-  })
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
 
@@ -71,46 +65,74 @@ export default function NotificationsBell() {
     }
   }, [])
 
-  useEffect(() => {
+  const loadItems = useCallback(async (allowBootstrap: boolean) => {
     if (!profile) return
 
-    const storageKey = `${LAST_SEEN_PREFIX}:${profile.id}`
-    const storedState = localStorage.getItem(storageKey)
-    setReadState(parseNotificationReadState(storedState))
-
-    let cancelled = false
     setLoading(true)
     setError(null)
 
-    fetchNotifications({ userId: profile.id, name: profile.name })
-      .then((nextItems) => {
-        if (cancelled || !mounted.current) return
-        setItems(nextItems)
-      })
-      .catch((nextError) => {
-        if (cancelled || !mounted.current) return
-        setError(nextError instanceof Error ? nextError.message : 'Could not load notifications.')
-      })
-      .finally(() => {
-        if (cancelled || !mounted.current) return
-        setLoading(false)
-      })
+    try {
+      let nextItems = await fetchNotifications(profile.id)
 
-    return () => {
-      cancelled = true
+      if (
+        allowBootstrap
+        && typeof window !== 'undefined'
+        && nextItems.length === 0
+        && !localStorage.getItem(`${BOOTSTRAP_PREFIX}:${profile.id}`)
+      ) {
+        await syncAllNotifications()
+        localStorage.setItem(`${BOOTSTRAP_PREFIX}:${profile.id}`, '1')
+        nextItems = await fetchNotifications(profile.id)
+      }
+
+      if (!mounted.current) return
+      setItems(nextItems)
+    } catch (nextError) {
+      if (!mounted.current) return
+      setError(nextError instanceof Error ? nextError.message : 'Could not load notifications.')
+    } finally {
+      if (!mounted.current) return
+      setLoading(false)
     }
   }, [profile])
 
   useEffect(() => {
-    if (!open || !profile) return
-    if (unreadNotificationCount(items, readState) === 0) return
-    const storageKey = `${LAST_SEEN_PREFIX}:${profile.id}`
-    const nextState = markNotificationsRead(readState, items)
-    localStorage.setItem(storageKey, serializeNotificationReadState(nextState))
-    setReadState(nextState)
-  }, [open, profile, items, readState])
+    if (!profile) return
+    void loadItems(true)
 
-  const unreadCount = unreadNotificationCount(items, readState)
+    function handleChange() {
+      void loadItems(false)
+    }
+
+    window.addEventListener('summer-notifications-changed', handleChange)
+    return () => {
+      window.removeEventListener('summer-notifications-changed', handleChange)
+    }
+  }, [profile, loadItems])
+
+  useEffect(() => {
+    if (!open || !profile) return
+    void loadItems(false)
+  }, [open, profile, loadItems])
+
+  useEffect(() => {
+    if (!open || !profile) return
+    const unreadIds = items.filter((item) => !item.read_at).map((item) => item.id)
+    if (unreadIds.length === 0) return
+
+    void markNotificationsRead(profile.id, unreadIds).then(() => {
+      if (!mounted.current) return
+      const readAt = new Date().toISOString()
+      setItems((current) => current.map((item) => (
+        unreadIds.includes(item.id) ? { ...item, read_at: readAt } : item
+      )))
+    }).catch((nextError) => {
+      if (!mounted.current) return
+      setError(nextError instanceof Error ? nextError.message : 'Could not mark notifications read.')
+    })
+  }, [open, profile, items])
+
+  const unreadCount = items.filter((item) => !item.read_at).length
 
   return (
     <>
@@ -136,16 +158,16 @@ export default function NotificationsBell() {
           />
 
           <section className="absolute right-4 top-4 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-[24px] border border-stone/70 bg-cream shadow-[var(--shadow-raised)]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-sand-alt">
+            <div className="flex items-center justify-between border-b border-sand-alt px-5 py-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-mute">Notifications</p>
-                <p className="text-sm text-ink-soft mt-1">
+                <p className="mt-1 text-sm text-ink-soft">
                   {loading ? 'Checking what changed…' : unreadCount > 0 ? `${unreadCount} new` : 'You’re caught up'}
                 </p>
               </div>
               <button
                 onClick={() => setOpen(false)}
-                className="text-ink-faint hover:text-ink-soft transition-colors"
+                className="text-ink-faint transition-colors hover:text-ink-soft"
                 aria-label="Close"
               >
                 <XIcon size={18} />
@@ -160,7 +182,7 @@ export default function NotificationsBell() {
               )}
 
               {!error && loading && (
-                <div className="px-5 py-4 flex flex-col gap-3 animate-pulse">
+                <div className="flex flex-col gap-3 px-5 py-4 animate-pulse">
                   <div className="h-16 rounded-[16px] bg-sand" />
                   <div className="h-16 rounded-[16px] bg-sand" />
                   <div className="h-16 rounded-[16px] bg-sand" />
@@ -170,14 +192,14 @@ export default function NotificationsBell() {
               {!error && !loading && items.length === 0 && (
                 <div className="px-5 py-10 text-center">
                   <p className="font-semibold text-ink">Nothing new right now</p>
-                  <p className="text-sm text-ink-soft mt-1">Votes, confirmed plans, and ideas with momentum will show up here.</p>
+                  <p className="mt-1 text-sm text-ink-soft">Confirmed plans, reminders, and vote nudges will show up here.</p>
                 </div>
               )}
 
               {!error && !loading && items.length > 0 && (
-                <div className="p-3 flex flex-col gap-2">
+                <div className="flex flex-col gap-2 p-3">
                   {items.map((item) => {
-                    const unread = isNotificationUnread(item, readState)
+                    const unread = !item.read_at
                     const Icon = iconFor(item)
                     const tone = TONE_STYLES[item.tone]
                     return (
@@ -190,15 +212,15 @@ export default function NotificationsBell() {
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
                           <Icon size={18} />
                         </span>
-                        <span className="flex-1 min-w-0">
+                        <span className="min-w-0 flex-1">
                           <span className="flex items-start justify-between gap-2">
-                            <span className="font-semibold text-sm text-ink leading-5">{item.title}</span>
+                            <span className="text-sm font-semibold leading-5 text-ink">{item.title}</span>
                             {unread && (
-                              <span className={`mt-0.5 shrink-0 w-2.5 h-2.5 rounded-full ${tone.badge}`} />
+                              <span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.badge}`} />
                             )}
                           </span>
-                          <span className="block text-xs text-ink-soft mt-1 leading-5">{item.body}</span>
-                          <span className="block text-[11px] text-ink-mute mt-1.5">{formatWhen(item.timestamp)}</span>
+                          <span className="mt-1 block text-xs leading-5 text-ink-soft">{item.body}</span>
+                          <span className="mt-1.5 block text-[11px] text-ink-mute">{formatWhen(item.scheduled_for)}</span>
                         </span>
                       </Link>
                     )

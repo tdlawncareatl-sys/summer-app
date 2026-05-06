@@ -37,6 +37,60 @@ length picker fails to save, run:
 supabase/migrations/20260425_add_event_length_type.sql
 ```
 
+## Notification System
+
+Summer Plans now has a real notification inbox backed by Supabase, plus optional web push for
+installed iPhone Home Screen users.
+
+The notification data model lives in:
+
+```bash
+supabase/migrations/20260506_add_notifications.sql
+```
+
+Run that migration once in Supabase SQL Editor if the new notification tables are not live yet.
+
+### What works without extra setup
+
+- in-app bell notifications for:
+  - event confirmed
+  - event reminders
+  - vote needed nudges
+- per-user notification preferences on the Me page
+
+### What extra setup is needed for push
+
+Push is optional. If the push env vars are missing, the bell still works and the app safely
+disables device push.
+
+Add these env vars locally and in Vercel:
+
+```bash
+NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY=
+WEB_PUSH_PRIVATE_KEY=
+WEB_PUSH_SUBJECT=mailto:you@example.com
+CRON_SECRET=
+```
+
+Generate VAPID keys with:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then:
+
+- add the public/private keys to your envs
+- add `CRON_SECRET` in Vercel
+- keep the cron in `vercel.json` enabled so reminders dispatch each day
+
+On iPhone, users should:
+
+- open Summer Plans in Safari
+- use `Add to Home Screen`
+- open `Me`
+- turn on push notifications for that device
+
 What each one does:
 
 - `npm run test` runs the fast Vitest suite for logic and component behavior.

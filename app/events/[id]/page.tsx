@@ -11,6 +11,7 @@ import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
 import { toLocalISODate } from '@/lib/date'
 import { compareRankedDateOptions } from '@/lib/dateOptionRanking'
+import { dispatchReadyNotifications, syncEventNotifications } from '@/lib/notifications'
 import {
   buildAppleMapsUrl,
   eventDraftFromRecord,
@@ -86,6 +87,7 @@ type EventRow = {
   status: string
   created_by: string | null
   created_at: string | null
+  confirmed_at?: string | null
   confirmed_date?: string | null
   confirmed_end_date?: string | null
   location_name?: string | null
@@ -342,11 +344,22 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setEditingDetails(true)
   }
 
+  async function refreshEventNotifications(actorUserId?: string | null, shouldDispatch = false) {
+    try {
+      await syncEventNotifications(id, actorUserId)
+      if (shouldDispatch) {
+        await dispatchReadyNotifications(id)
+      }
+    } catch (error) {
+      console.error('Notification sync failed', error)
+    }
+  }
+
   async function addDateOption() {
     if (!selectedRange || !name) return
     setAddingDate(true)
     setDetailError(null)
-    await ensureUser(name)
+    const actorUserId = await ensureUser(name)
     const payload: Record<string, string> = { event_id: id, date: selectedRange.start, created_by: name }
     if (selectedRange.end !== selectedRange.start) payload.end_date = selectedRange.end
     const { error } = await supabase.from('date_options').insert(payload)
@@ -359,6 +372,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setDetailMessage('Date option added.')
     setAddingDate(false)
     await loadAll()
+    await refreshEventNotifications(actorUserId, true)
   }
 
   async function vote(dateOptionId: string, response: ResponseValue, points: number) {
@@ -408,6 +422,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
 
       await loadAll()
+      await refreshEventNotifications(userId, true)
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : 'Could not save your vote.')
     } finally {
@@ -424,8 +439,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
     setConfirming(true)
     setDetailError(null)
+    const confirmedAt = new Date().toISOString()
+    const actorUserId = name ? await ensureUser(name) : null
     const { error } = await supabase.from('events').update({
       status: 'confirmed',
+      confirmed_at: confirmedAt,
       confirmed_date: winner.date,
       confirmed_end_date: winner.end_date ?? null,
     }).eq('id', event.id)
@@ -437,12 +455,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setEvent({
       ...event,
       status: 'confirmed',
+      confirmed_at: confirmedAt,
       confirmed_date: winner.date,
       confirmed_end_date: winner.end_date,
     })
     setDetailMessage('Event confirmed.')
     setConfirming(false)
     await loadAll()
+    await refreshEventNotifications(actorUserId, true)
   }
 
   async function unconfirmEvent() {
@@ -451,18 +471,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setConfirming(true)
     setDetailError(null)
     setDetailMessage(null)
+    const actorUserId = name ? await ensureUser(name) : null
     const { error } = await supabase
       .from('events')
-      .update({ status: 'planning', confirmed_date: null, confirmed_end_date: null })
+      .update({ status: 'planning', confirmed_at: null, confirmed_date: null, confirmed_end_date: null })
       .eq('id', event.id)
     if (error) {
       setDetailError(error.message)
       setConfirming(false)
       return
     }
-    setEvent({ ...event, status: 'planning', confirmed_date: null, confirmed_end_date: null })
+    setEvent({ ...event, status: 'planning', confirmed_at: null, confirmed_date: null, confirmed_end_date: null })
     setDetailMessage('Confirmation cleared — pick a new date below.')
     setConfirming(false)
+    await refreshEventNotifications(actorUserId, true)
     requestAnimationFrame(focusCalendar)
   }
 

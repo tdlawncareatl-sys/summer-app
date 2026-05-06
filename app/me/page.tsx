@@ -17,10 +17,11 @@ import Card from '../components/Card'
 import Avatar from '../components/Avatar'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
+import NotificationSettingsCard from '../components/NotificationSettingsCard'
 import { ChevronRightIcon, CalendarIcon, LightbulbIcon } from '../components/icons'
 
 export default function MePage() {
-  const { authUser, signOut } = useAuth()
+  const { authUser, profile, signOut } = useAuth()
   const [name, setName] = useName()
   const [data, setData] = useState<PlanData | null>(null)
   const [editingName, setEditingName] = useState(!name)
@@ -149,6 +150,10 @@ export default function MePage() {
             sub={<span className="text-ink-mute">Summer 2026</span>}
           />
         </section>
+      )}
+
+      {profile && (
+        <NotificationSettingsCard userId={profile.id} />
       )}
 
       {/* Events I'm hosting */}
