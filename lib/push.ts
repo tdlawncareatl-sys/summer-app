@@ -9,9 +9,21 @@ declare global {
 }
 
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = window.atob(base64)
+  const normalized = base64String
+    .trim()
+    .replace(/^Public Key:\s*/i, '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, '')
+
+  const padding = '='.repeat((4 - (normalized.length % 4)) % 4)
+  const base64 = (normalized + padding).replace(/-/g, '+').replace(/_/g, '/')
+  let rawData = ''
+  try {
+    rawData = window.atob(base64)
+  } catch {
+    throw new Error('The public push key is malformed. Re-copy the VAPID public key into NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY.')
+  }
+
   return Uint8Array.from(rawData, (char) => char.charCodeAt(0))
 }
 
@@ -47,7 +59,7 @@ export function isStandaloneWebApp() {
 }
 
 export function getPushPublicKey() {
-  return process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY ?? ''
+  return (process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY ?? '').trim()
 }
 
 export async function getCurrentPushSubscription() {
