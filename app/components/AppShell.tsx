@@ -124,7 +124,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   pattern="[0-9]*"
                   value={code}
                   onChange={(event) => setCode(event.target.value.replace(/\D+/g, '').slice(0, MAX_EMAIL_OTP_LENGTH))}
-                  placeholder="Enter the code from your email"
+                  placeholder="Code"
                   autoComplete="one-time-code"
                   className="mt-2 w-full rounded-[16px] border-0 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.18em] text-ink focus:outline-none focus:ring-2 focus:ring-olive"
                 />
