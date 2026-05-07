@@ -21,6 +21,12 @@ type PushSubscriptionRow = {
   auth: string
 }
 
+type DeliveryFailure = {
+  statusCode: number | null
+  message: string
+  endpointHost: string
+}
+
 function configureWebPush() {
   const subject = process.env.WEB_PUSH_SUBJECT
   const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY
@@ -78,6 +84,7 @@ async function sendDueNotifications(eventId?: string) {
 
   const disabledEndpoints = new Set<string>()
   const deliveredNotificationIds = new Set<string>()
+  const deliveryFailures: DeliveryFailure[] = []
   let attemptedDeliveries = 0
 
   for (const notification of dueNotifications) {
@@ -111,12 +118,30 @@ async function sendDueNotifications(eventId?: string) {
         const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
           ? Number((error as { statusCode?: number }).statusCode)
           : null
+        const endpointHost = (() => {
+          try {
+            return new URL(subscription.endpoint).host
+          } catch {
+            return 'unknown'
+          }
+        })()
+        const message = error instanceof Error ? error.message : 'Push send failed'
 
         if (statusCode === 404 || statusCode === 410) {
           disabledEndpoints.add(subscription.endpoint)
+          deliveryFailures.push({
+            statusCode,
+            message,
+            endpointHost,
+          })
           continue
         }
 
+        deliveryFailures.push({
+          statusCode,
+          message,
+          endpointHost,
+        })
         console.error('Push send failed', error)
       }
     }
@@ -150,8 +175,10 @@ async function sendDueNotifications(eventId?: string) {
   return {
     sent: deliveredNotificationIds.size,
     attemptedDeliveries,
-    queuedWithoutDelivery: dueNotifications.length - deliveredNotificationIds.size,
+    queuedWithoutDelivery: Math.max(0, attemptedDeliveries - deliveredNotificationIds.size),
     disabledSubscriptions: disabledEndpoints.size,
+    notificationCount: dueNotifications.length,
+    deliveryFailures: deliveryFailures.slice(0, 5),
   }
 }
 
