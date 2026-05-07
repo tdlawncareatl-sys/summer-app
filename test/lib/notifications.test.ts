@@ -86,7 +86,7 @@ describe('buildEventNotificationPlans', () => {
       nowIso: '2026-05-03T15:05:00.000Z',
     })
 
-    expect(plans.filter((plan) => plan.type === 'event_confirmed')).toHaveLength(2)
+    expect(plans.filter((plan) => plan.type === 'event_confirmed')).toHaveLength(3)
     expect(plans.filter((plan) => plan.type === 'event_reminder')).toHaveLength(6)
     expect(plans[0]?.body).toContain('Lake House')
   })

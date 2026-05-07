@@ -198,7 +198,7 @@ export function buildEventNotificationPlans(input: {
       const recentConfirmation = event.confirmed_at
         && new Date(event.confirmed_at).getTime() >= new Date(nowIso).getTime() - CONFIRM_NOTIFICATION_WINDOW_MS
 
-      if (preferences.confirmedEnabled && event.confirmed_at && recentConfirmation && user.id !== input.actorUserId) {
+      if (preferences.confirmedEnabled && event.confirmed_at && recentConfirmation) {
         plans.push({
           userId: user.id,
           eventId: event.id,
