@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
+import type { EmailOtpType, Session, User as SupabaseUser } from '@supabase/supabase-js'
 import { ensureUser } from './ensureUser'
 import { supabase } from './supabase'
 
@@ -173,15 +173,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null)
     setAuthMessage(null)
 
-    const { error } = await supabase.auth.verifyOtp({
-      email: trimmedEmail,
-      token: trimmedCode,
-      type: 'email',
-    })
+    // Some Supabase project states still treat first-time passwordless users as a
+    // signup confirmation flow rather than a plain email OTP flow. Try the current
+    // email OTP type first, then fall back to signup so new users do not get stuck.
+    const verificationTypes: EmailOtpType[] = ['email', 'signup']
+    let lastError: Error | null = null
 
-    if (error) {
-      setAuthError(error.message)
-      throw error
+    for (const verificationType of verificationTypes) {
+      const { error } = await supabase.auth.verifyOtp({
+        email: trimmedEmail,
+        token: trimmedCode,
+        type: verificationType,
+      })
+
+      if (!error) return
+      lastError = error
+    }
+
+    if (lastError) {
+      setAuthError(lastError.message)
+      throw lastError
     }
   }
 
