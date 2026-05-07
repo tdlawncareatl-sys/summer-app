@@ -192,7 +192,7 @@ export default function NotificationsBell() {
               {!error && !loading && items.length === 0 && (
                 <div className="px-5 py-10 text-center">
                   <p className="font-semibold text-ink">Nothing new right now</p>
-                  <p className="mt-1 text-sm text-ink-soft">Confirmed plans, reminders, and vote nudges will show up here.</p>
+                  <p className="mt-1 text-sm text-ink-soft">Confirmed plans, reminders, and vote nudges will land here.</p>
                 </div>
               )}
 

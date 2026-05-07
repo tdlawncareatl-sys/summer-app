@@ -59,6 +59,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 
 const MORNING_UTC_HOUR = 13
 const CONFIRM_NOTIFICATION_WINDOW_MS = 1000 * 60 * 60 * 24 * 7
+const VOTE_NUDGE_DELAY_MINUTES = 20
 
 function parseCalendarDate(iso: string) {
   const [year, month, day] = iso.split('-').map(Number)
@@ -77,6 +78,20 @@ function shiftCalendarDate(iso: string, deltaDays: number) {
 
 function scheduledIsoForDay(iso: string) {
   return `${iso}T${String(MORNING_UTC_HOUR).padStart(2, '0')}:00:00.000Z`
+}
+
+function addMinutesToIso(iso: string, minutes: number) {
+  const date = new Date(iso)
+  date.setUTCMinutes(date.getUTCMinutes() + minutes)
+  return date.toISOString()
+}
+
+function nextMorningAfterIso(iso: string) {
+  const date = new Date(iso)
+  const next = new Date(date)
+  next.setUTCDate(next.getUTCDate() + 1)
+  next.setUTCHours(MORNING_UTC_HOUR, 0, 0, 0)
+  return next.toISOString()
 }
 
 function dayDiffInclusive(start: string, end?: string | null) {
@@ -147,22 +162,19 @@ function buildReminderMoments(event: NotificationEventRow, reminderTiming: Remin
       })
     } else {
       const weekday = parseCalendarDate(start).getUTCDay()
-      const mondayOffset = weekday === 0 ? -6 : 1 - weekday
-      const monday = shiftCalendarDate(start, mondayOffset)
-
-      if (monday < start) {
+      if (weekday === 5 || weekday === 6) {
         candidates.push({
-          day: monday,
-          title: `${event.title} is this week`,
+          day: shiftCalendarDate(start, weekday === 5 ? -1 : -2),
+          title: `${event.title} is this weekend`,
+          body: formatDateRangeShort(start, event.confirmed_end_date),
+        })
+      } else {
+        candidates.push({
+          day: shiftCalendarDate(start, -1),
+          title: `${event.title} is tomorrow`,
           body: formatDateRangeShort(start, event.confirmed_end_date),
         })
       }
-
-      candidates.push({
-        day: shiftCalendarDate(start, -1),
-        title: `${event.title} is tomorrow`,
-        body: formatDateRangeShort(start, event.confirmed_end_date),
-      })
     }
   }
 
@@ -204,7 +216,7 @@ export function buildEventNotificationPlans(input: {
           eventId: event.id,
           type: 'event_confirmed',
           tone: 'olive',
-          title: `${event.title} is locked in`,
+          title: `${event.title} is set`,
           body: event.location_name?.trim()
             ? `${formatDateRangeShort(event.confirmed_date, event.confirmed_end_date)} · ${event.location_name.trim()}`
             : formatDateRangeShort(event.confirmed_date, event.confirmed_end_date),
@@ -241,6 +253,8 @@ export function buildEventNotificationPlans(input: {
     .map((option) => option.created_at)
     .sort()
     .at(-1) ?? event.created_at
+  const voteNudgeAt = addMinutesToIso(latestOptionAt, VOTE_NUDGE_DELAY_MINUTES)
+  const voteFollowUpAt = nextMorningAfterIso(voteNudgeAt)
 
   for (const user of input.users) {
     const preferences = normalizePreferences(input.preferencesByUserId[user.id])
@@ -253,11 +267,23 @@ export function buildEventNotificationPlans(input: {
       eventId: event.id,
       type: 'vote_needed',
       tone: 'terracotta',
-      title: `Vote on ${event.title}`,
-      body: `${input.dateOptions.length} date option${input.dateOptions.length === 1 ? '' : 's'} waiting on you`,
+      title: `${event.title} needs your vote`,
+      body: `${input.dateOptions.length} date option${input.dateOptions.length === 1 ? ' is' : 's are'} ready for you`,
       href,
-      dedupeKey: `vote-needed:${event.id}:${user.id}:${latestOptionAt}`,
-      scheduledFor: latestOptionAt,
+      dedupeKey: `vote-needed:${event.id}:${user.id}:${latestOptionAt}:first`,
+      scheduledFor: voteNudgeAt,
+    })
+
+    plans.push({
+      userId: user.id,
+      eventId: event.id,
+      type: 'vote_needed',
+      tone: 'terracotta',
+      title: `${event.title} still needs your vote`,
+      body: `${input.dateOptions.length} date option${input.dateOptions.length === 1 ? ' is' : 's are'} still waiting on you`,
+      href,
+      dedupeKey: `vote-needed:${event.id}:${user.id}:${latestOptionAt}:followup`,
+      scheduledFor: voteFollowUpAt,
     })
   }
 

@@ -55,12 +55,18 @@ describe('buildEventNotificationPlans', () => {
       nowIso: '2026-05-02T12:05:00.000Z',
     })
 
-    expect(plans).toHaveLength(2)
-    expect(plans.map((plan) => plan.userId).sort()).toEqual(['user-1', 'user-3'])
+    expect(plans).toHaveLength(4)
+    expect(plans.filter((plan) => plan.userId === 'user-1')).toHaveLength(2)
+    expect(plans.filter((plan) => plan.userId === 'user-3')).toHaveLength(2)
     expect(plans[0]).toMatchObject({
       type: 'vote_needed',
-      title: 'Vote on Pool Day',
-      scheduledFor: '2026-05-02T11:00:00.000Z',
+      title: 'Pool Day needs your vote',
+      scheduledFor: '2026-05-02T11:20:00.000Z',
+    })
+    expect(plans[1]).toMatchObject({
+      type: 'vote_needed',
+      title: 'Pool Day still needs your vote',
+      scheduledFor: '2026-05-03T13:00:00.000Z',
     })
   })
 
@@ -88,6 +94,9 @@ describe('buildEventNotificationPlans', () => {
 
     expect(plans.filter((plan) => plan.type === 'event_confirmed')).toHaveLength(3)
     expect(plans.filter((plan) => plan.type === 'event_reminder')).toHaveLength(6)
+    expect(plans.filter((plan) => plan.type === 'event_confirmed')[0]).toMatchObject({
+      title: 'Lake Weekend is set',
+    })
     expect(plans[0]?.body).toContain('Lake House')
   })
 
@@ -120,5 +129,34 @@ describe('buildEventNotificationPlans', () => {
     expect(user2.some((plan) => plan.type === 'event_reminder')).toBe(false)
     expect(user3.some((plan) => plan.type === 'event_confirmed')).toBe(false)
     expect(user3.filter((plan) => plan.type === 'event_reminder')).toHaveLength(1)
+  })
+
+  it('uses a weekend heads-up for smart reminders on friday and saturday plans', () => {
+    const event: NotificationEventRow = {
+      id: 'event-4',
+      title: 'Pickleball Saturday',
+      status: 'confirmed',
+      created_at: '2026-05-01T12:00:00.000Z',
+      confirmed_at: '2026-05-03T15:00:00.000Z',
+      confirmed_date: '2026-05-16',
+      confirmed_end_date: null,
+      location_name: 'Central Courts',
+    }
+
+    const plans = buildEventNotificationPlans({
+      event,
+      users: USERS,
+      dateOptions: [],
+      votes: [],
+      preferencesByUserId: buildPreferencesMap(),
+      nowIso: '2026-05-03T15:05:00.000Z',
+    })
+
+    const reminders = plans.filter((plan) => plan.type === 'event_reminder' && plan.userId === 'user-1')
+    expect(reminders).toHaveLength(1)
+    expect(reminders[0]).toMatchObject({
+      title: 'Pickleball Saturday is this weekend',
+      scheduledFor: '2026-05-14T13:00:00.000Z',
+    })
   })
 })

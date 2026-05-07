@@ -131,7 +131,7 @@ export default function NotificationSettingsCard({ userId }: { userId: string })
             Stay in the loop
           </h2>
           <p className="mt-2 text-sm leading-6 text-ink-soft">
-            Confirmed plans, smart reminders, and vote nudges all live here.
+            Confirmed plans, reminders, and vote nudges all land here.
           </p>
         </div>
         {saving ? (
@@ -146,13 +146,13 @@ export default function NotificationSettingsCard({ userId }: { userId: string })
           <div className="mt-5 grid gap-4">
             <PreferenceRow
               title="Event confirmed"
-              description="Send a notification when a date gets locked in."
+              description="Let me know when a plan gets set."
               enabled={preferences.confirmedEnabled}
               onToggle={(value) => void save({ ...preferences, confirmedEnabled: value })}
             />
             <PreferenceRow
               title="Vote needed"
-              description="Nudge people when a plan is waiting on their vote."
+              description="Give me a nudge when a plan needs my vote."
               enabled={preferences.voteNeededEnabled}
               onToggle={(value) => void save({ ...preferences, voteNeededEnabled: value })}
             />
@@ -161,7 +161,7 @@ export default function NotificationSettingsCard({ userId }: { userId: string })
           <div className="mt-5">
             <p className="text-sm font-semibold text-ink">Event reminders</p>
             <p className="mt-1 text-xs leading-5 text-ink-soft">
-              Choose how early you want reminders before a plan.
+              Choose how early you want the heads-up.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {REMINDER_OPTIONS.map((option) => (
