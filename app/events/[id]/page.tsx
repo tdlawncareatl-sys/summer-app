@@ -161,6 +161,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [detailMessage, setDetailMessage] = useState<string | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
 
+  const [lengthDraft, setLengthDraft] = useState<number>(1)
   const [multiDayInput, setMultiDayInput] = useState(2)
   const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null)
   const [calPreview, setCalPreview] = useState<Set<string>>(new Set())
@@ -180,6 +181,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   // current value (or sensible default of 2 if event isn't multi-day yet).
   useEffect(() => {
     if (editingLength) {
+      const nextLength = normalizeLengthType(event?.length_days)
+      setLengthDraft(nextLength)
       setMultiDayInput(event?.length_days && event.length_days >= 2 ? event.length_days : 2)
     }
   }, [editingLength, event?.length_days])
@@ -539,6 +542,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setShowAllBest(false) // length change resets the expanded list
   }
 
+  function commitLengthDraft() {
+    const nextLength = lengthDraft >= 2 ? Math.max(2, Math.min(30, multiDayInput)) : lengthDraft
+    void saveLength(nextLength)
+  }
+
   async function shareEvent() {
     if (typeof window === 'undefined' || !event) return
     const url = window.location.href
@@ -594,6 +602,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setSelectedRange({ start: days[0], end: days[days.length - 1] })
     calDrag.current = null
     setCalPreview(new Set())
+  }
+  function handleCalendarTap(iso: string) {
+    if (iso < todayISO) return
+    calDrag.current = null
+    setCalPreview(new Set())
+    setSelectedRange((current) => {
+      if (!current) return { start: iso, end: iso }
+      if (iso < current.start) return { start: iso, end: iso }
+      return { start: current.start, end: iso }
+    })
   }
   function isoFromTouch(touch: { clientX: number; clientY: number }) {
     const target = document.elementFromPoint(touch.clientX, touch.clientY)
@@ -673,6 +691,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const bestSummary = topBest && topBest.buckets.blocked === 0 && topBest.buckets.unknown === 0
     ? summarizeBuckets(topBest.buckets)
     : null
+  const hasLengthDraftChanges = lengthDraft >= 2
+    ? multiDayInput !== lengthType
+    : lengthDraft !== lengthType
 
   return (
     <main className="mx-auto max-w-md px-5 pb-12 no-select">
@@ -956,7 +977,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <p className="text-xs font-bold text-olive">{bestSummary}</p>
             ) : null}
           </div>
-          <p className="mb-3 text-xs text-ink-soft">Tap a range to seed the calendar, then drag to extend.</p>
+          <p className="mb-3 text-xs text-ink-soft">Tap a range to seed the calendar, then tap a later day if you want to extend it.</p>
           <div className="flex flex-col gap-1.5">
             {visibleBest.map((range) => (
               <BestRangeRow key={`${range.startDate}_${range.endDate}`} range={range} lengthType={lengthType} onSelect={() => seedFromBest(range)} />
@@ -1070,7 +1091,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <div ref={calCardRef} className="mb-6 scroll-mt-4">
         <Card>
           <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Propose Dates</p>
-          <p className="mb-3 text-xs text-ink-soft">Tap a day or drag to select a multi-day range.</p>
+          <p className="mb-3 text-xs text-ink-soft">Tap one day to start, then tap a later day to fill in every day between.</p>
 
           <div className="mb-3 flex flex-wrap items-center gap-3">
             {([
@@ -1115,19 +1136,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               ))}
             </div>
 
-            <div
-              className="grid grid-cols-7 gap-0.5 bg-cream p-2"
-              onTouchStart={(e) => {
-                const iso = isoFromTouch(e.touches[0])
-                if (iso) calStartDrag(iso)
-              }}
-              onTouchMove={(e) => {
-                e.preventDefault()
-                const iso = isoFromTouch(e.touches[0])
-                if (iso) calMoveDrag(iso)
-              }}
-              onTouchEnd={calCommitDrag}
-            >
+            <div className="grid grid-cols-7 gap-0.5 bg-cream p-2">
               {calCells.map((iso, idx) => {
                 if (!iso) return <div key={`empty-${idx}`} className="aspect-square" />
                 const isPast = iso < todayISO
@@ -1153,6 +1162,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   <div
                     key={iso}
                     data-iso={iso}
+                    onClick={() => handleCalendarTap(iso)}
                     onMouseDown={() => calStartDrag(iso)}
                     onMouseEnter={() => calMoveDrag(iso)}
                     className={[
@@ -1181,9 +1191,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     : ` · ${summarizeBuckets(selectedScore.buckets)}`}
                 </span>
               ) : (
-                <span className="text-ink-mute">Tap or drag to select</span>
+                <span className="text-ink-mute">Tap a day to start</span>
               )}
             </div>
+            {selectedRange ? (
+              <button
+                type="button"
+                onClick={() => setSelectedRange(null)}
+                className="rounded-xl bg-sand px-3 py-2.5 text-sm font-semibold text-ink-soft transition-all active:scale-95"
+              >
+                Clear
+              </button>
+            ) : null}
             <button
               onClick={addDateOption}
               disabled={!selectedRange || addingDate}
@@ -1313,67 +1332,102 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <p className="mb-4 text-sm text-ink-soft">Changing this updates the Best Available suggestions.</p>
           <div className="flex flex-col gap-2">
             <LengthPickerRow
-              active={lengthType === 0}
-              disabled={savingLength}
+              active={lengthDraft === 0}
               title="Partial day"
               helper="A short hangout — drinks, dinner, a few hours."
-              onClick={() => void saveLength(0)}
+              onClick={() => setLengthDraft(0)}
             />
             <LengthPickerRow
-              active={lengthType === 1}
-              disabled={savingLength}
+              active={lengthDraft === 1}
               title="One-day event"
               helper="A full day — beach trip, hike, single-day plan."
-              onClick={() => void saveLength(1)}
+              onClick={() => setLengthDraft(1)}
             />
             <div
               className={[
                 'rounded-[14px] border transition-colors',
-                lengthType >= 2 ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
+                lengthDraft >= 2 ? 'border-olive bg-olive-tint' : 'border-stone/60 bg-cream',
               ].join(' ')}
             >
               <button
                 type="button"
-                disabled={savingLength}
-                onClick={() => void saveLength(multiDayInput)}
+                onClick={() => setLengthDraft(Math.max(2, multiDayInput))}
                 className="flex w-full items-start gap-3 px-3 py-3 text-left active:scale-[0.99]"
               >
                 <span
                   className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                    lengthType >= 2 ? 'border-olive bg-olive text-white' : 'border-stone'
+                    lengthDraft >= 2 ? 'border-olive bg-olive text-white' : 'border-stone'
                   }`}
                 >
-                  {lengthType >= 2 ? <CheckIcon size={12} /> : null}
+                  {lengthDraft >= 2 ? <CheckIcon size={12} /> : null}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-ink">Multi-day trip</span>
                   <span className="mt-0.5 block text-xs text-ink-soft">Pick exactly how many days the group is together.</span>
                 </span>
               </button>
-              <div className="flex items-center gap-3 border-t border-stone/40 px-3 py-2.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-mute">How many days?</span>
-                <div className="ml-auto flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={2}
-                    max={30}
-                    value={multiDayInput}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value)
-                      if (!Number.isFinite(raw)) return
-                      const next = Math.min(30, Math.max(2, Math.round(raw)))
-                      setMultiDayInput(next)
-                      if (lengthType >= 2 && next !== lengthType) void saveLength(next)
-                    }}
-                    onBlur={() => {
-                      if (lengthType >= 2 && multiDayInput !== lengthType) void saveLength(multiDayInput)
-                    }}
-                    className="w-20 rounded-lg border border-stone/60 bg-cream px-2 py-1.5 text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-olive"
-                  />
-                  <span className="text-xs text-ink-soft">days</span>
+              {lengthDraft >= 2 ? (
+                <div className="border-t border-stone/40 px-3 py-3">
+                  <div className="flex items-center gap-3 rounded-[16px] bg-cream px-3 py-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-mute">How many days?</span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMultiDayInput((current) => Math.max(2, current - 1))}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stone/60 bg-white text-lg font-bold text-ink"
+                        aria-label="Decrease trip length"
+                      >
+                        -
+                      </button>
+                      <div className="min-w-[72px] rounded-[14px] bg-sand px-3 py-2 text-center">
+                        <span className="block text-lg font-black text-ink">{multiDayInput}</span>
+                        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">days</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMultiDayInput((current) => Math.min(30, current + 1))}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stone/60 bg-white text-lg font-bold text-ink"
+                        aria-label="Increase trip length"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[2, 3, 4, 5, 7].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setMultiDayInput(days)}
+                        className={[
+                          'rounded-full px-3 py-1.5 text-xs font-semibold',
+                          multiDayInput === days ? 'bg-olive text-white' : 'bg-sand text-ink-soft',
+                        ].join(' ')}
+                      >
+                        {days} days
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={commitLengthDraft}
+              disabled={savingLength || !hasLengthDraftChanges}
+              className="flex-1 rounded-xl bg-olive py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+            >
+              {savingLength ? 'Saving…' : 'Save length'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingLength(false)}
+              className="rounded-xl bg-sand px-4 py-2.5 text-sm font-semibold text-ink-soft"
+            >
+              Cancel
+            </button>
           </div>
         </Sheet>
       ) : null}
@@ -1683,7 +1737,7 @@ function Sheet({
         onClick={onClose}
         className="absolute inset-0 bg-ink/40"
       />
-      <div className="relative mx-3 mb-3 w-full max-w-md rounded-[24px] bg-cream p-5 shadow-[var(--shadow-raised)]">
+      <div className="relative mx-3 mb-3 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-[24px] bg-cream p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-[var(--shadow-raised)]">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-bold uppercase tracking-[0.14em] text-ink-mute">{title}</p>
           <button

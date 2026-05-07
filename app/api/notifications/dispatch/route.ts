@@ -77,10 +77,13 @@ async function sendDueNotifications(eventId?: string) {
   }
 
   const disabledEndpoints = new Set<string>()
+  const deliveredNotificationIds = new Set<string>()
+  let attemptedDeliveries = 0
 
   for (const notification of dueNotifications) {
     const userSubscriptions = subscriptionsByUserId[notification.user_id] ?? []
     for (const subscription of userSubscriptions) {
+      attemptedDeliveries += 1
       try {
         await webpush.sendNotification(
           {
@@ -103,6 +106,7 @@ async function sendDueNotifications(eventId?: string) {
             },
           }),
         )
+        deliveredNotificationIds.add(notification.id)
       } catch (error) {
         const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
           ? Number((error as { statusCode?: number }).statusCode)
@@ -132,17 +136,21 @@ async function sendDueNotifications(eventId?: string) {
     }
   }
 
-  const { error: markSentError } = await serverSupabase
-    .from('notifications')
-    .update({ sent_at: now })
-    .in('id', dueNotifications.map((item) => item.id))
+  if (deliveredNotificationIds.size > 0) {
+    const { error: markSentError } = await serverSupabase
+      .from('notifications')
+      .update({ sent_at: now })
+      .in('id', [...deliveredNotificationIds])
 
-  if (markSentError) {
-    throw new Error(markSentError.message)
+    if (markSentError) {
+      throw new Error(markSentError.message)
+    }
   }
 
   return {
-    sent: dueNotifications.length,
+    sent: deliveredNotificationIds.size,
+    attemptedDeliveries,
+    queuedWithoutDelivery: dueNotifications.length - deliveredNotificationIds.size,
     disabledSubscriptions: disabledEndpoints.size,
   }
 }
