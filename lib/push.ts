@@ -15,6 +15,18 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from(rawData, (char) => char.charCodeAt(0))
 }
 
+function uint8ArrayToBase64Url(bytes: Uint8Array) {
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+  return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function subscriptionMatchesPublicKey(subscription: PushSubscription, publicKey: string) {
+  const serverKey = subscription.options.applicationServerKey
+  if (!serverKey) return false
+  const bytes = serverKey instanceof ArrayBuffer ? new Uint8Array(serverKey) : new Uint8Array(serverKey)
+  return uint8ArrayToBase64Url(bytes) === publicKey.replace(/=+$/g, '')
+}
+
 function subscriptionPayload(subscription: PushSubscription) {
   const json = subscription.toJSON()
   return {
@@ -61,6 +73,16 @@ export async function ensurePushSubscription(userId: string) {
   }
 
   let subscription = await registration.pushManager.getSubscription()
+  if (subscription && !subscriptionMatchesPublicKey(subscription, publicKey)) {
+    try {
+      await disablePushSubscription(subscription.endpoint)
+    } catch {
+      // If the old endpoint cannot be marked disabled remotely, still refresh locally.
+    }
+    await subscription.unsubscribe().catch(() => undefined)
+    subscription = null
+  }
+
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
