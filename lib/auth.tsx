@@ -146,13 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null)
     setAuthMessage(null)
 
-    const redirectTo =
-      typeof window === 'undefined' ? undefined : `${window.location.origin}/`
-
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
-        emailRedirectTo: redirectTo,
+        shouldCreateUser: true,
       },
     })
 
@@ -176,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Some Supabase project states still treat first-time passwordless users as a
     // signup confirmation flow rather than a plain email OTP flow. Try the current
     // email OTP type first, then fall back to signup so new users do not get stuck.
-    const verificationTypes: EmailOtpType[] = ['email', 'signup']
+    const verificationTypes: EmailOtpType[] = ['email', 'signup', 'magiclink']
     let lastError: Error | null = null
 
     for (const verificationType of verificationTypes) {
