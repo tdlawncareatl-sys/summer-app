@@ -252,7 +252,7 @@ export default function IdeasPage() {
         subtitle="Capture and plan what to do next."
         action={name ? (
           <div className="flex justify-end">
-            <button
+            <button type="button"
               onClick={revealForm}
               className="inline-flex items-center gap-2 rounded-[18px] bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
             >
@@ -279,7 +279,7 @@ export default function IdeasPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute">Add an idea</p>
                   <p className="mt-1 text-sm text-ink-soft">Anything you want to do this summer.</p>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => {
                     setShowForm(false)
                     setTitle('')
@@ -312,7 +312,7 @@ export default function IdeasPage() {
                 placeholder="Any details to help the group picture it?"
                 className="mt-3 w-full resize-none rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
-              <button
+              <button type="button"
                 onClick={() => void submitIdea()}
                 disabled={!title.trim() || submitting}
                 className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
@@ -375,7 +375,7 @@ export default function IdeasPage() {
             )}
 
             {sortedUnplannedIdeas.length > (showAllActive ? 6 : 3) && (
-              <button
+              <button type="button"
                 onClick={() => setShowAllActive((current) => !current)}
                 className="mx-auto mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
               >
@@ -496,7 +496,7 @@ function ActionRailItem({
   onClick: () => void
 }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       className="flex flex-col items-start gap-2 px-3 py-3 text-left transition-colors hover:bg-sand-alt"
     >
@@ -552,7 +552,7 @@ function IdeaRow({
               </div>
             </div>
             {isOwner ? (
-              <button
+              <button type="button"
                 onClick={onDelete}
                 disabled={deleting}
                 className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
@@ -601,7 +601,7 @@ function IdeaRow({
               disabled={liking}
               onClick={() => onChoose('pass')}
             />
-            <button
+            <button type="button"
               onClick={onPlan}
               disabled={planning}
               className="ml-auto inline-flex items-center gap-2 rounded-[16px] bg-olive px-4 py-2 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
@@ -636,7 +636,7 @@ function PreferenceButton({
     'bg-blush-soft text-blush'
 
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       disabled={disabled}
       className={[
@@ -722,7 +722,7 @@ function LinkishButton({
   }
 
   return (
-    <button onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
+    <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
       {label}
       <ChevronRightIcon size={14} />
     </button>

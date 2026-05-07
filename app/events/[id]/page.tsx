@@ -187,8 +187,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [editingLength, event?.length_days])
 
-  async function loadAll() {
-    setLoadingEvent(true)
+  async function loadAll(config?: { blocking?: boolean }) {
+    const blocking = config?.blocking ?? true
+    if (blocking) {
+      setLoadingEvent(true)
+    }
     setLoadError(null)
 
     const [
@@ -374,14 +377,64 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setSelectedRange(null)
     setDetailMessage('Date option added.')
     setAddingDate(false)
-    await loadAll()
+    await loadAll({ blocking: false })
     await refreshEventNotifications(actorUserId, true)
+  }
+
+  function updateDateOptionsForVote(
+    options: DateOption[],
+    currentUserName: string,
+    dateOptionId: string,
+    response: ResponseValue,
+    points: number,
+  ) {
+    const next = options.map((option) => ({
+      ...option,
+      votes: option.votes.map((voteRow) => ({ ...voteRow })),
+      blockedNames: [...option.blockedNames],
+    }))
+
+    if (response === 'best') {
+      for (const option of next) {
+        if (option.id === dateOptionId) continue
+        option.votes = option.votes.filter((voteRow) => !(voteRow.user_name === currentUserName && voteRow.response === 'best'))
+      }
+    }
+
+    const target = next.find((option) => option.id === dateOptionId)
+    if (!target) return next
+
+    const existing = target.votes.find((voteRow) => voteRow.user_name === currentUserName)
+    if (existing) {
+      if (existing.response === response) {
+        target.votes = target.votes.filter((voteRow) => voteRow.user_name !== currentUserName)
+      } else {
+        existing.response = response
+        existing.points = points
+      }
+    } else {
+      target.votes.push({
+        user_name: currentUserName,
+        response,
+        points,
+      })
+    }
+
+    for (const option of next) {
+      option.totalPoints = option.votes.reduce((sum, voteRow) => sum + voteRow.points, 0)
+      option.conflictScore = option.totalPoints - option.blockedCount * 2
+    }
+
+    next.sort(compareRankedDateOptions)
+    return next
   }
 
   async function vote(dateOptionId: string, response: ResponseValue, points: number) {
     if (!name || voting) return
     setVoting(dateOptionId)
     setDetailError(null)
+    const previousDateOptions = dateOptions
+    setDateOptions((current) => updateDateOptionsForVote(current, name, dateOptionId, response, points))
 
     try {
       const userId = await ensureUser(name)
@@ -424,9 +477,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         if (error) throw error
       }
 
-      await loadAll()
+      void loadAll({ blocking: false })
       await refreshEventNotifications(userId, true)
     } catch (error) {
+      setDateOptions(previousDateOptions)
       setDetailError(error instanceof Error ? error.message : 'Could not save your vote.')
     } finally {
       setVoting(null)
@@ -464,7 +518,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     })
     setDetailMessage('Event confirmed.')
     setConfirming(false)
-    await loadAll()
+    await loadAll({ blocking: false })
     await refreshEventNotifications(actorUserId, true)
   }
 
@@ -959,7 +1013,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       {/* Confirm button */}
       {showConfirm ? (
-        <button
+        <button type="button"
           onClick={confirmEvent}
           disabled={confirming}
           className="mb-4 w-full rounded-[var(--radius-lg)] bg-olive py-3.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] disabled:opacity-50"
@@ -1034,7 +1088,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         const bestTaken = response.value === 'best' && myBestOptionId !== null && myBestOptionId !== option.id
                         const tone = response.value === 'best' ? VOTE.best : response.value === 'works' ? VOTE.works : VOTE.pass
                         return (
-                          <button
+                          <button type="button"
                             key={response.value}
                             onClick={() => vote(option.id, response.value, response.points)}
                             disabled={voting === option.id}
@@ -1113,7 +1167,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             onMouseLeave={calCommitDrag}
           >
             <div className="flex items-center justify-between bg-ink px-3 py-2 text-cream">
-              <button
+              <button type="button"
                 onClick={prevMonth}
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Previous month"
@@ -1121,7 +1175,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 <ChevronLeftIcon size={16} />
               </button>
               <span className="text-xs font-semibold">{MONTHS[calMonth]} {calYear}</span>
-              <button
+              <button type="button"
                 onClick={nextMonth}
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Next month"
@@ -1203,7 +1257,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 Clear
               </button>
             ) : null}
-            <button
+            <button type="button"
               onClick={addDateOption}
               disabled={!selectedRange || addingDate}
               className="rounded-xl bg-olive px-4 py-2.5 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40"

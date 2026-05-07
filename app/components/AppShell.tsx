@@ -105,7 +105,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               autoComplete="email"
               className="mt-2 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
             />
-            <button
+            <button type="button"
               onClick={handleEmailCodeRequest}
               disabled={!email.trim() || submitting}
               className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
@@ -128,14 +128,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   autoComplete="one-time-code"
                   className="mt-2 w-full rounded-[16px] border-0 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.18em] text-ink focus:outline-none focus:ring-2 focus:ring-olive"
                 />
-                <button
+                <button type="button"
                   onClick={handleCodeVerify}
                   disabled={code.trim().length < MIN_EMAIL_OTP_LENGTH || submitting}
                   className="mt-3 w-full rounded-[16px] bg-ink py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
                 >
                   {submitting ? 'Checking code…' : 'Verify code'}
                 </button>
-                <button
+                <button type="button"
                   onClick={() => {
                     clearPendingEmail()
                     setCode('')
@@ -194,7 +194,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             autoFocus
             className="mt-4 w-full rounded-[16px] border-0 bg-sand px-4 py-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
           />
-          <button
+          <button type="button"
             onClick={handleProfileSave}
             disabled={!displayName.trim() || submitting}
             className="mt-3 w-full rounded-[16px] bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"

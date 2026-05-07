@@ -136,7 +136,7 @@ export default function NotificationsBell() {
 
   return (
     <>
-      <button
+      <button type="button"
         onClick={() => setOpen(true)}
         className="relative text-ink transition-colors hover:text-olive"
         aria-label="Notifications"
@@ -151,7 +151,7 @@ export default function NotificationsBell() {
 
       {open && (
         <div className="fixed inset-0 z-50">
-          <button
+          <button type="button"
             aria-label="Close notifications"
             className="absolute inset-0 bg-ink/18 backdrop-blur-[1px]"
             onClick={() => setOpen(false)}
@@ -165,7 +165,7 @@ export default function NotificationsBell() {
                   {loading ? 'Checking what changed…' : unreadCount > 0 ? `${unreadCount} new` : 'You’re caught up'}
                 </p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => setOpen(false)}
                 className="text-ink-faint transition-colors hover:text-ink-soft"
                 aria-label="Close"

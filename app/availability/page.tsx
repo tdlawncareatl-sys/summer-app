@@ -383,14 +383,14 @@ export default function AvailabilityPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') saveWithCategory(pendingLabel.trim() || null) }}
               className="w-full bg-sand border-0 rounded-xl px-4 py-3 text-sm text-ink mb-3 focus:outline-none focus:ring-2 focus:ring-olive transition"
             />
-            <button
+            <button type="button"
               onClick={() => saveWithCategory(pendingLabel.trim() || null)}
               disabled={savingCategory}
               className="w-full bg-olive text-white rounded-xl py-3 text-sm font-bold mb-2 active:scale-[0.98] transition-all disabled:opacity-40"
             >
               {savingCategory ? 'Saving…' : 'Save'}
             </button>
-            <button
+            <button type="button"
               onClick={() => saveWithCategory(null)}
               disabled={savingCategory}
               className="w-full text-sm text-ink-soft hover:text-ink py-2 transition-colors"
@@ -404,7 +404,7 @@ export default function AvailabilityPage() {
       {/* View toggle */}
       <div className="flex bg-stone rounded-xl p-1 mb-5 gap-1">
         {(['mine', 'list', 'group'] as const).map((mode) => (
-          <button
+          <button type="button"
             key={mode}
             onClick={() => { setViewMode(mode); setSelectedDate(null) }}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${
@@ -444,11 +444,11 @@ export default function AvailabilityPage() {
 
               <Card padded={false} className="overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
-                  <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
+                  <button type="button" onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
                     <ChevronLeftIcon size={16} />
                   </button>
                   <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
-                  <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
+                  <button type="button" onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
                     <ChevronRightIcon size={16} />
                   </button>
                 </div>
@@ -524,7 +524,7 @@ export default function AvailabilityPage() {
                   )}
                 </div>
                 {futureRecords.length > 0 && (
-                  <button
+                  <button type="button"
                     onClick={clearAllFuture}
                     disabled={clearingAll}
                     className="text-xs font-semibold text-blush hover:text-blush/80 border border-blush-soft px-3 py-1.5 rounded-xl transition-all disabled:opacity-40"
@@ -577,7 +577,7 @@ export default function AvailabilityPage() {
                             </div>
                           </div>
                         </div>
-                        <button
+                        <button type="button"
                           onClick={() => removeRange(range)}
                           disabled={removingRange === range.start}
                           className="text-xs font-semibold text-ink-soft hover:text-blush px-3 py-1.5 rounded-xl transition-all disabled:opacity-40 shrink-0 bg-sand hover:bg-sand-alt"
@@ -616,11 +616,11 @@ export default function AvailabilityPage() {
 
               <Card padded={false} className="overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
-                  <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
+                  <button type="button" onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
                     <ChevronLeftIcon size={16} />
                   </button>
                   <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
-                  <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
+                  <button type="button" onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
                     <ChevronRightIcon size={16} />
                   </button>
                 </div>
@@ -663,7 +663,7 @@ export default function AvailabilityPage() {
                     <p className="font-semibold text-ink">
                       {formatDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric' })}
                     </p>
-                    <button onClick={() => setSelectedDate(null)} className="text-ink-faint hover:text-ink-soft" aria-label="Close">
+                    <button type="button" onClick={() => setSelectedDate(null)} className="text-ink-faint hover:text-ink-soft" aria-label="Close">
                       <XIcon size={16} />
                     </button>
                   </div>

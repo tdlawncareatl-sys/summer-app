@@ -105,7 +105,7 @@ export default function CalendarPage() {
       <Card className="p-4">
         <div className="flex items-center justify-between gap-3">
           <ViewTabs value={viewMode} onChange={setViewMode} />
-          <button
+          <button type="button"
             onClick={() => setFiltersOpen((current) => !current)}
             className="inline-flex items-center gap-1.5 rounded-[16px] bg-sand px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-stone"
           >
@@ -138,7 +138,7 @@ export default function CalendarPage() {
           </div>
         ) : (
           <div className="mt-5 flex items-center justify-between gap-3">
-            <button
+            <button type="button"
               onClick={() => {
                 if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, -1))
                 if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, -7))
@@ -151,7 +151,7 @@ export default function CalendarPage() {
             <h2 className="font-serif text-xl font-black text-ink">
               {viewMode === 'month' ? formatMonthLabel(monthCursor) : formatWeekLabel(weekCursor)}
             </h2>
-            <button
+            <button type="button"
               onClick={() => {
                 if (viewMode === 'month') setMonthCursor((current) => shiftMonth(current, 1))
                 if (viewMode === 'week') setWeekCursor((current) => shiftWeek(current, 7))
@@ -206,7 +206,7 @@ export default function CalendarPage() {
       <section className="mt-7 mb-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">This Week</h2>
-          <button
+          <button type="button"
             onClick={() => setViewMode('week')}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
           >
@@ -237,7 +237,7 @@ function ViewTabs({
   return (
     <div className="inline-flex rounded-[18px] border border-stone/70 bg-sand p-1">
       {(['month', 'week', 'list'] as ViewMode[]).map((view) => (
-        <button
+        <button type="button"
           key={view}
           onClick={() => onChange(view)}
           className={[
@@ -263,7 +263,7 @@ function FilterChip({
 }) {
   const token = STATUS[status]
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       className={[
         'inline-flex items-center gap-2 rounded-[14px] px-3 py-2 text-sm font-semibold transition-colors',

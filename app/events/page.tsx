@@ -135,7 +135,7 @@ export default function EventsPage() {
       {name && (
         <Card className="mb-5">
           {!showForm ? (
-            <button
+            <button type="button"
               onClick={() => setShowForm(true)}
               className="w-full flex items-center gap-3 text-left"
             >

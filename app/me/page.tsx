@@ -87,7 +87,7 @@ export default function MePage() {
                 className="w-full bg-sand border-0 rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive transition"
               />
               <div className="flex gap-2">
-                <button
+                <button type="button"
                   onClick={saveName}
                   disabled={!draft.trim() || savingName}
                   className="flex-1 bg-olive text-white rounded-xl py-2 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
@@ -95,7 +95,7 @@ export default function MePage() {
                   {savingName ? 'Saving…' : 'Save'}
                 </button>
                 {name && (
-                  <button
+                  <button type="button"
                     onClick={() => { setEditingName(false); setDraft(name) }}
                     className="px-4 bg-sand text-ink-soft rounded-xl py-2 text-sm font-semibold active:scale-[0.98] transition-transform"
                   >
@@ -111,7 +111,7 @@ export default function MePage() {
               {authUser?.email && (
                 <p className="text-xs text-ink-mute mt-1">{authUser.email}</p>
               )}
-              <button
+              <button type="button"
                 onClick={() => setEditingName(true)}
                 className="mt-1 text-xs font-semibold text-olive"
               >
@@ -210,7 +210,7 @@ export default function MePage() {
           <Divider />
           <NavRow Icon={LightbulbIcon} tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
         </Card>
-        <button
+        <button type="button"
           onClick={handleSignOut}
           disabled={signingOut}
           className="mt-3 w-full rounded-[var(--radius-lg)] bg-stone px-4 py-3 text-sm font-semibold text-ink-soft transition-colors hover:text-ink disabled:opacity-40"

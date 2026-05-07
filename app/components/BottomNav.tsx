@@ -34,7 +34,7 @@ export default function BottomNav() {
 
               {/* Center FAB */}
               <div className="flex justify-center -mt-5">
-                <button
+                <button type="button"
                   onClick={() => setSheetOpen(true)}
                   className="flex h-14 w-14 items-center justify-center rounded-full bg-olive text-white shadow-[var(--shadow-raised)] transition-transform active:scale-95"
                   aria-label="Create"
@@ -67,7 +67,7 @@ export default function BottomNav() {
                 { label: 'New idea',  sub: 'Throw something out for the group', href: '/ideas', tint: 'bg-amber-tint text-amber' },
                 { label: 'Time block', sub: 'Mark dates you can\u2019t make it', href: '/availability', tint: 'bg-olive-tint text-olive' },
               ].map((a) => (
-                <button
+                <button type="button"
                   key={a.label}
                   onClick={() => { setSheetOpen(false); router.push(a.href) }}
                   className="flex items-center gap-3 rounded-[16px] bg-sand px-4 py-3 text-left transition active:scale-[0.99]"
@@ -80,7 +80,7 @@ export default function BottomNav() {
                 </button>
               ))}
             </div>
-            <button
+            <button type="button"
               onClick={() => setSheetOpen(false)}
               className="w-full mt-4 text-sm text-ink-mute hover:text-ink py-2 transition-colors"
             >

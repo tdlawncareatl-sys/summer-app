@@ -165,7 +165,7 @@ export default function NotificationSettingsCard({ userId }: { userId: string })
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {REMINDER_OPTIONS.map((option) => (
-                <button
+                <button type="button"
                   key={option.value}
                   onClick={() => void save({ ...preferences, reminderTiming: option.value })}
                   className={[
@@ -189,7 +189,7 @@ export default function NotificationSettingsCard({ userId }: { userId: string })
                   Best experience comes from adding Summer Plans to your Home Screen first.
                 </p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => void (pushEnabled ? disablePush() : enablePush())}
                 disabled={pushBusy || !pushSupported || !pushConfigured}
                 className={[
@@ -249,7 +249,7 @@ function PreferenceRow({
         <p className="text-sm font-semibold text-ink">{title}</p>
         <p className="mt-1 text-xs leading-5 text-ink-soft">{description}</p>
       </div>
-      <button
+      <button type="button"
         onClick={() => onToggle(!enabled)}
         className={[
           'rounded-full px-3 py-1 text-xs font-semibold transition-colors',
