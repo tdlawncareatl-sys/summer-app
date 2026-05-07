@@ -81,8 +81,33 @@ describe('AppShell', () => {
     render(<AppShell><div>App</div></AppShell>)
 
     expect(screen.getByText('Code sent.')).toBeInTheDocument()
-    expect(screen.getByLabelText('6-digit code')).toBeInTheDocument()
+    expect(screen.getByLabelText('Sign-in code')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Verify code' })).toBeDisabled()
+  })
+
+  it('accepts longer email OTP codes instead of slicing to six digits', () => {
+    useAuthMock.mockReturnValue({
+      loading: false,
+      session: null,
+      profile: null,
+      pendingProfile: false,
+      authUser: null,
+      pendingEmail: 'tad@example.com',
+      authMessage: 'Code sent.',
+      authError: null,
+      requestEmailCode: vi.fn(),
+      verifyEmailCode: vi.fn(),
+      clearPendingEmail: vi.fn(),
+      completeProfile: vi.fn(),
+    })
+
+    render(<AppShell><div>App</div></AppShell>)
+
+    const input = screen.getByLabelText('Sign-in code') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '12345678' } })
+
+    expect(input.value).toBe('12345678')
+    expect(screen.getByRole('button', { name: 'Verify code' })).toBeEnabled()
   })
 
   it('renders the profile setup screen when auth exists but app profile is pending', () => {
