@@ -25,6 +25,7 @@ type DeliveryFailure = {
   statusCode: number | null
   message: string
   endpointHost: string
+  body?: string | null
 }
 
 function configureWebPush() {
@@ -126,6 +127,9 @@ async function sendDueNotifications(eventId?: string) {
           }
         })()
         const message = error instanceof Error ? error.message : 'Push send failed'
+        const body = typeof error === 'object' && error !== null && 'body' in error
+          ? String((error as { body?: unknown }).body ?? '')
+          : null
 
         if (statusCode === 404 || statusCode === 410) {
           disabledEndpoints.add(subscription.endpoint)
@@ -133,6 +137,7 @@ async function sendDueNotifications(eventId?: string) {
             statusCode,
             message,
             endpointHost,
+            body,
           })
           continue
         }
@@ -141,6 +146,7 @@ async function sendDueNotifications(eventId?: string) {
           statusCode,
           message,
           endpointHost,
+          body,
         })
         console.error('Push send failed', error)
       }
