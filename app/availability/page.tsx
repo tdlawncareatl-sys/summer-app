@@ -40,6 +40,20 @@ type GroupBlackouts = Record<string, string[]>
 type EventConflict = { id: string; title: string; conflictingDates: string[] }
 type BlackoutRecord = { date: string; category?: string | null }
 
+// Pull a usable message off any thrown value (Error, PostgrestError, plain
+// object). Without this, errors that don't pass `instanceof Error` (which can
+// happen for PostgrestError across realm/serialization boundaries) silently
+// fall through to a generic notice and we lose the real cause.
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'object' && error !== null) {
+    const candidate = (error as { message?: unknown }).message
+    if (typeof candidate === 'string' && candidate) return candidate
+  }
+  if (typeof error === 'string' && error) return error
+  return fallback
+}
+
 function collapseToRanges(records: BlackoutRecord[]): DateRange[] {
   if (records.length === 0) return []
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
@@ -155,10 +169,11 @@ export default function AvailabilityPage() {
       setBlackoutRecords(data ?? [])
       setBlackouts(new Set((data ?? []).map((r) => r.date)))
     } catch (error) {
+      console.error('availability.loadUser', error)
       setUserId(null)
       setBlackoutRecords([])
       setBlackouts(new Set())
-      showNotice(error instanceof Error ? error.message : 'Could not load your blocked dates.', 'error')
+      showNotice(extractErrorMessage(error, 'Could not load your blocked dates.'), 'error')
     }
   }
 
@@ -203,7 +218,8 @@ export default function AvailabilityPage() {
       setEventConflicts(conflicts)
     } catch (error) {
       setEventConflicts([])
-      showNotice(error instanceof Error ? error.message : 'Could not refresh event conflicts.', 'error')
+      console.error('availability.loadEventConflicts', error)
+      showNotice(extractErrorMessage(error, 'Could not refresh event conflicts.'), 'error')
     }
   }
 
