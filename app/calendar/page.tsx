@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
-import { toLocalISODate } from '@/lib/date'
+import { eachDay, toLocalISODate } from '@/lib/date'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
 import { STATUS, type EventStatus } from '@/lib/status'
 import PageHeader from '../components/PageHeader'
@@ -501,15 +501,7 @@ function dominantStatus(meta?: DayMeta) {
 }
 
 function daysBetween(start: string, end: string | null | undefined) {
-  if (!end || end === start) return [start]
-  const output: string[] = []
-  const current = new Date(start + 'T12:00:00')
-  const stop = new Date(end + 'T12:00:00')
-  while (current <= stop) {
-    output.push(toLocalISODate(current))
-    current.setDate(current.getDate() + 1)
-  }
-  return output
+  return eachDay(start, end)
 }
 
 function spansDate(event: EnrichedEvent, date: string) {

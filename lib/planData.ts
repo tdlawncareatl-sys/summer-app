@@ -2,7 +2,7 @@
 // Home / Calendar / Me / Ideas all need overlapping slices of this.
 
 import { supabase } from './supabase'
-import { toLocalISODate, todayLocalISO } from './date'
+import { eachDay, todayLocalISO } from './date'
 import { compareRankedDateOptions } from './dateOptionRanking'
 import { EventStatus, inferEventStatus } from './status'
 
@@ -182,15 +182,7 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
 }
 
 function daysBetween(startIso: string, endIso: string | null | undefined): string[] {
-  if (!endIso || endIso === startIso) return [startIso]
-  const out: string[] = []
-  const cur = new Date(startIso + 'T12:00:00')
-  const end = new Date(endIso + 'T12:00:00')
-  while (cur <= end) {
-    out.push(toLocalISODate(cur))
-    cur.setDate(cur.getDate() + 1)
-  }
-  return out
+  return eachDay(startIso, endIso)
 }
 
 /* ── Date helpers exported for consumers ─────────────────────────────── */

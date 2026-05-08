@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
-import { toLocalISODate } from '@/lib/date'
+import { eachDay, toLocalISODate } from '@/lib/date'
 import { useName } from '@/lib/useName'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
@@ -22,13 +22,7 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 const DAY_LABELS = ['S','M','T','W','T','F','S']
 
 function getRange(a: string, b: string): string[] {
-  const start = new Date(a + 'T12:00:00')
-  const end = new Date(b + 'T12:00:00')
-  const [s, e] = start <= end ? [start, end] : [end, start]
-  const days: string[] = []
-  const cur = new Date(s)
-  while (cur <= e) { days.push(toLocalISODate(cur)); cur.setDate(cur.getDate() + 1) }
-  return days
+  return eachDay(a, b)
 }
 
 function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {

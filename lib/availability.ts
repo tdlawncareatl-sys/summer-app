@@ -8,7 +8,7 @@
 // (any date, past or future). Treating no-rows as "unknown" prevents the page from
 // claiming "12/12 free" when nobody has actually opened the app yet.
 
-import { toLocalISODate } from './date'
+import { eachDay, toLocalISODate } from './date'
 import { LengthType, normalizeLengthDays, scheduledDays } from './lengthType'
 
 export type Participant = { id: string; name: string }
@@ -34,18 +34,9 @@ export type EventOptionRange = {
   end_date?: string | null
 }
 
+/** @deprecated use `eachDay` from `lib/date.ts` directly. Kept for the older callers. */
 export function getRange(startISO: string, endISO: string): string[] {
-  if (endISO === startISO) return [startISO]
-  const start = new Date(startISO + 'T12:00:00')
-  const end = new Date(endISO + 'T12:00:00')
-  const [s, e] = start <= end ? [start, end] : [end, start]
-  const out: string[] = []
-  const cur = new Date(s)
-  while (cur <= e) {
-    out.push(toLocalISODate(cur))
-    cur.setDate(cur.getDate() + 1)
-  }
-  return out
+  return eachDay(startISO, endISO)
 }
 
 export function scoreRange(

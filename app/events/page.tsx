@@ -17,6 +17,7 @@ import StatusChip from '../components/StatusChip'
 import IconTile from '../components/IconTile'
 import EventLocationFields from '../components/EventLocationFields'
 import { ChevronRightIcon, PlusIcon, XIcon } from '../components/icons'
+import { eachDay } from '@/lib/date'
 
 type Event = {
   id: string
@@ -58,13 +59,14 @@ export default function EventsPage() {
     if (!data) { setLoading(false); return }
 
     const [{ data: dateOptions }, { data: votes }] = await Promise.all([
-      supabase.from('date_options').select('id, event_id, date'),
+      supabase.from('date_options').select('id, event_id, date, end_date'),
       supabase.from('votes').select('id, date_option_id'),
     ])
 
-    const optionsByEvent: Record<string, { id: string; date: string }[]> = {}
+    type OptionRow = { id: string; date: string; end_date: string | null }
+    const optionsByEvent: Record<string, OptionRow[]> = {}
     for (const opt of dateOptions ?? []) {
-      ;(optionsByEvent[opt.event_id] ??= []).push({ id: opt.id, date: opt.date })
+      ;(optionsByEvent[opt.event_id] ??= []).push({ id: opt.id, date: opt.date, end_date: opt.end_date ?? null })
     }
     const votesByOption: Record<string, number> = {}
     for (const v of votes ?? []) {
@@ -84,7 +86,12 @@ export default function EventsPage() {
     const enriched: Event[] = data.map((ev) => {
       const opts = optionsByEvent[ev.id] ?? []
       const totalVotes = opts.reduce((sum, o) => sum + (votesByOption[o.id] ?? 0), 0)
-      const myConflictCount = name ? opts.filter((o) => myBlackouts.has(o.date)).length : 0
+      // An option counts as conflicting if ANY day in its range overlaps a
+      // blackout. Single-day options pass end_date=null and eachDay returns
+      // just the start.
+      const myConflictCount = name
+        ? opts.filter((o) => eachDay(o.date, o.end_date).some((d) => myBlackouts.has(d))).length
+        : 0
       return { ...ev, dateCount: opts.length, voteCount: totalVotes, myConflictCount }
     })
 
