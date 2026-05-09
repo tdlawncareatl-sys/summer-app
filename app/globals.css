@@ -143,9 +143,12 @@ body {
   padding-top: max(env(safe-area-inset-top), 0px);
 }
 
-/* Calendar grid taps should not double-tap-zoom or trigger text selection. */
+/* Calendar grid: lock touch to the app so single-finger drag-to-range works
+   without iOS panning the page. `touch-action: none` is the strict version
+   needed for drag selection — the parent layout still scrolls everywhere
+   else because body uses `manipulation`. */
 .calendar-grid {
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-user-select: none;
   user-select: none;
 }

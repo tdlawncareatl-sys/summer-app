@@ -87,10 +87,15 @@ export default function AvailabilityPage() {
   const [month, setMonth] = useState(today.getMonth())
   const [viewMode, setViewMode] = useState<'mine' | 'list' | 'group'>('mine')
 
-  // Range-mode tap-tap state. `rangeMode = true` means the next tap anchors a
-  // range; the tap after that completes it. Default is single-tap toggle.
+  // Two ways to pick a range:
+  //   1) Hit "Block range" → tap anchor day → tap end day. `rangeMode` carries it.
+  //   2) Press and drag across days. `dragPreview` shows the live span.
+  // A single tap (no drag, no rangeMode) just toggles that one day.
   const [rangeMode, setRangeMode] = useState(false)
   const [rangeAnchor, setRangeAnchor] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<Set<string>>(new Set())
+  const dragRef = useRef<{ startIso: string; didDrag: boolean } | null>(null)
+  const wasDragRef = useRef(false)
 
   const [pendingDays, setPendingDays] = useState<string[] | null>(null)
   const [pendingLabel, setPendingLabel] = useState('')
@@ -251,6 +256,8 @@ export default function AvailabilityPage() {
 
   async function handleCalendarTap(iso: string) {
     if (iso < todayISO || !userId) return
+    // A drag just committed — swallow the synthetic click that follows pointerup.
+    if (wasDragRef.current) return
 
     if (rangeMode) {
       if (!rangeAnchor) {
@@ -277,6 +284,47 @@ export default function AvailabilityPage() {
   function clearRange() {
     setRangeAnchor(null)
     setRangeMode(false)
+  }
+
+  // ─── drag-to-select-range ────────────────────────────────────────────────
+  function isoUnderPointer(clientX: number, clientY: number): string | null {
+    const el = document.elementFromPoint(clientX, clientY)
+    return el?.closest('[data-iso]')?.getAttribute('data-iso') ?? null
+  }
+  function onGridPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!userId) return
+    const iso = isoUnderPointer(e.clientX, e.clientY)
+    if (!iso || iso < todayISO) return
+    dragRef.current = { startIso: iso, didDrag: false }
+    setDragPreview(new Set([iso]))
+  }
+  function onGridPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return
+    const iso = isoUnderPointer(e.clientX, e.clientY)
+    if (!iso || iso < todayISO) return
+    if (iso !== dragRef.current.startIso) dragRef.current.didDrag = true
+    setDragPreview(new Set(getRange(dragRef.current.startIso, iso)))
+  }
+  async function onGridPointerUp() {
+    if (!dragRef.current) return
+    const { startIso, didDrag } = dragRef.current
+    const days = [...dragPreview].sort()
+    dragRef.current = null
+    setDragPreview(new Set())
+    if (!didDrag) return // single tap — onClick will run handleCalendarTap
+
+    // Drag committed: derive add/remove from the anchor day's current state.
+    wasDragRef.current = true
+    setTimeout(() => { wasDragRef.current = false }, 0)
+    setRangeAnchor(null)
+    setRangeMode(false)
+    const mode = blackouts.has(startIso) ? 'remove' : 'add'
+    if (mode === 'add') await commitRangeAdd(days)
+    else await commitRangeRemove(days)
+  }
+  function onGridPointerCancel() {
+    dragRef.current = null
+    setDragPreview(new Set())
   }
 
   async function saveWithCategory(category: string | null) {
@@ -477,12 +525,25 @@ export default function AvailabilityPage() {
                     <div key={i} className="text-center text-[10px] font-bold text-ink-mute py-2 uppercase tracking-wider">{d}</div>
                   ))}
                 </div>
-                <div className="calendar-grid grid grid-cols-7 gap-0.5 p-3">
+                <div
+                  className="calendar-grid grid grid-cols-7 gap-0.5 p-3"
+                  onPointerDown={onGridPointerDown}
+                  onPointerMove={onGridPointerMove}
+                  onPointerUp={onGridPointerUp}
+                  onPointerCancel={onGridPointerCancel}
+                  onPointerLeave={onGridPointerCancel}
+                >
                   {cells.map((iso, i) => {
                     if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
                     const isPast = iso < todayISO
                     const isBlocked = blackouts.has(iso)
                     const isAnchor = rangeAnchor === iso
+                    const isInDrag = dragPreview.has(iso)
+                    // Drag preview shape changes color depending on whether the
+                    // anchor day is currently blocked (remove) or unblocked (add).
+                    const dragMode = dragRef.current
+                      ? blackouts.has(dragRef.current.startIso) ? 'remove' : 'add'
+                      : null
                     const isToday = iso === todayISO
                     const day = parseInt(iso.split('-')[2])
                     const record = blackoutRecords.find((r) => r.date === iso)
@@ -497,14 +558,16 @@ export default function AvailabilityPage() {
                         className={[
                           'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors',
                           isPast ? 'text-ink-faint cursor-default' : 'cursor-pointer',
-                          !isPast && isBlocked ? 'bg-blush text-white' : '',
-                          !isPast && !isBlocked ? 'text-ink hover:bg-sand' : '',
-                          isAnchor ? 'ring-2 ring-olive ring-offset-1 ring-offset-cream' : '',
-                          isToday && !isBlocked && !isAnchor ? 'ring-1 ring-olive' : '',
+                          !isPast && isBlocked && !isInDrag ? 'bg-blush text-white' : '',
+                          !isPast && !isBlocked && !isInDrag ? 'text-ink hover:bg-sand' : '',
+                          !isPast && isInDrag && dragMode === 'add' ? 'bg-blush-soft text-blush font-semibold' : '',
+                          !isPast && isInDrag && dragMode === 'remove' ? 'bg-stone text-ink-soft font-semibold' : '',
+                          isAnchor && !isInDrag ? 'ring-2 ring-olive ring-offset-1 ring-offset-cream' : '',
+                          isToday && !isBlocked && !isAnchor && !isInDrag ? 'ring-1 ring-olive' : '',
                         ].join(' ')}
                       >
                         <span className="leading-none">{day}</span>
-                        {record?.category && isBlocked && (
+                        {record?.category && isBlocked && !isInDrag && (
                           <span className="text-[8px] leading-none mt-0.5 opacity-70">●</span>
                         )}
                       </button>
@@ -542,7 +605,7 @@ export default function AvailabilityPage() {
               </div>
 
               <p className="text-xs text-ink-mute text-center mt-3">
-                Tap a day to block · tap a blocked day to unblock · use <span className="font-semibold text-olive">Block range</span> for multi-day
+                Tap a day to block · tap a blocked day to unblock · drag (or use <span className="font-semibold text-olive">Block range</span>) for multi-day
               </p>
             </div>
           )}
