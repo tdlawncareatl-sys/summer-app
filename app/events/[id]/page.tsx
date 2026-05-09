@@ -1828,7 +1828,7 @@ function Sheet({
   footer?: ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <button
         type="button"
         aria-label="Close"
