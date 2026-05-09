@@ -25,7 +25,10 @@ export default function BottomNav() {
   return (
     <>
       <nav className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
-        <div className="max-w-md mx-auto px-4 pb-4 pointer-events-auto">
+        <div
+          className="max-w-md mx-auto px-4 pointer-events-auto"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+        >
           <div className="relative rounded-[24px] border border-stone/70 bg-cream shadow-[var(--shadow-raised)]">
             <div className="grid h-16 grid-cols-5 items-end px-2.5">
               {ITEMS.slice(0, 2).map((item) => (
@@ -57,6 +60,7 @@ export default function BottomNav() {
           <div className="absolute inset-0 bg-ink/30 backdrop-blur-sm" />
           <div
             className="relative w-full max-w-md rounded-t-[24px] border border-stone/70 bg-cream p-6 shadow-[var(--shadow-raised)]"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-stone rounded-full mx-auto mb-5" />

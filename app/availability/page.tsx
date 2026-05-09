@@ -85,8 +85,12 @@ export default function AvailabilityPage() {
   const [statusNotice, setStatusNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
-  const [previewDays, setPreviewDays] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'mine' | 'list' | 'group'>('mine')
+
+  // Range-mode tap-tap state. `rangeMode = true` means the next tap anchors a
+  // range; the tap after that completes it. Default is single-tap toggle.
+  const [rangeMode, setRangeMode] = useState(false)
+  const [rangeAnchor, setRangeAnchor] = useState<string | null>(null)
 
   const [pendingDays, setPendingDays] = useState<string[] | null>(null)
   const [pendingLabel, setPendingLabel] = useState('')
@@ -101,7 +105,6 @@ export default function AvailabilityPage() {
   const [removingRange, setRemovingRange] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
 
-  const drag = useRef<{ mode: 'add' | 'remove'; start: string } | null>(null)
   const noticeTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -217,47 +220,63 @@ export default function AvailabilityPage() {
     }
   }
 
-  function startDrag(iso: string) {
-    if (iso < todayISO) return
-    drag.current = { mode: blackouts.has(iso) ? 'remove' : 'add', start: iso }
-    setPreviewDays(new Set([iso]))
+  // Tap-tap range selection. Default mode: single tap toggles a day. When
+  // `rangeAnchor` is set, the next tap completes a range (add if anchor was
+  // unblocked, remove if anchor was already blocked).
+  async function commitRangeAdd(days: string[]) {
+    if (!userId) return
+    const toAdd = days.filter((d) => !blackouts.has(d))
+    if (!toAdd.length) return
+    clearNotice()
+    setPendingDays(toAdd)
+    setPendingLabel('')
   }
-  function moveDrag(iso: string) {
-    if (!drag.current || iso < todayISO) return
-    setPreviewDays(new Set(getRange(drag.current.start, iso)))
-  }
-  async function commitDrag() {
-    if (!drag.current || !userId || previewDays.size === 0) {
-      drag.current = null; setPreviewDays(new Set()); return
-    }
-    const { mode } = drag.current
-    drag.current = null
-    const days = [...previewDays]
-    setPreviewDays(new Set())
 
-    if (mode === 'remove') {
-      const toRemove = days.filter((d) => blackouts.has(d))
-      if (toRemove.length) {
-        clearNotice()
-        const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
-        if (error) {
-          showNotice(error.message || 'Could not remove those blocked dates.', 'error')
-          return
-        }
-        const newBlackouts = new Set(blackouts)
-        toRemove.forEach((d) => newBlackouts.delete(d))
-        setBlackouts(newBlackouts)
-        setBlackoutRecords((prev) => prev.filter((r) => !toRemove.includes(r.date)))
-        showNotice(toRemove.length === 1 ? 'Date unblocked.' : `${toRemove.length} blocked dates removed.`, 'success')
-      }
-    } else {
-      const toAdd = days.filter((d) => !blackouts.has(d))
-      if (toAdd.length) {
-        clearNotice()
-        setPendingDays(toAdd)
-        setPendingLabel('')
-      }
+  async function commitRangeRemove(days: string[]) {
+    if (!userId) return
+    const toRemove = days.filter((d) => blackouts.has(d))
+    if (!toRemove.length) return
+    clearNotice()
+    const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
+    if (error) {
+      showNotice(error.message || 'Could not remove those blocked dates.', 'error')
+      return
     }
+    const newBlackouts = new Set(blackouts)
+    toRemove.forEach((d) => newBlackouts.delete(d))
+    setBlackouts(newBlackouts)
+    setBlackoutRecords((prev) => prev.filter((r) => !toRemove.includes(r.date)))
+    showNotice(toRemove.length === 1 ? 'Date unblocked.' : `${toRemove.length} blocked dates removed.`, 'success')
+  }
+
+  async function handleCalendarTap(iso: string) {
+    if (iso < todayISO || !userId) return
+
+    if (rangeMode) {
+      if (!rangeAnchor) {
+        setRangeAnchor(iso)
+        return
+      }
+      const days = getRange(rangeAnchor, iso)
+      const mode = blackouts.has(rangeAnchor) ? 'remove' : 'add'
+      setRangeAnchor(null)
+      setRangeMode(false)
+      if (mode === 'add') await commitRangeAdd(days)
+      else await commitRangeRemove(days)
+      return
+    }
+
+    // Default mode — single-day toggle with no second tap required.
+    if (blackouts.has(iso)) {
+      await commitRangeRemove([iso])
+    } else {
+      await commitRangeAdd([iso])
+    }
+  }
+
+  function clearRange() {
+    setRangeAnchor(null)
+    setRangeMode(false)
   }
 
   async function saveWithCategory(category: string | null) {
@@ -321,11 +340,6 @@ export default function AvailabilityPage() {
     setClearingAll(false)
   }
 
-  function isoFromTouch(touch: React.Touch): string | null {
-    const el = document.elementFromPoint(touch.clientX, touch.clientY)
-    return el?.getAttribute('data-iso') ?? null
-  }
-
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells: (string | null)[] = [
@@ -361,16 +375,12 @@ export default function AvailabilityPage() {
     : ''
 
   return (
-    <main
-      className="max-w-md mx-auto px-5 no-select"
-      onMouseUp={viewMode === 'mine' ? commitDrag : undefined}
-      onMouseLeave={viewMode === 'mine' ? commitDrag : undefined}
-    >
+    <main className="max-w-md mx-auto px-5 no-select">
       <PageHeader
         variant="title"
         title="Availability"
         subtitle={
-          viewMode === 'mine' ? 'Block dates you can\u2019t make it. Drag for a range.'
+          viewMode === 'mine' ? 'Tap a day to block it. Use Block range for multi-day.'
           : viewMode === 'list' ? 'Review and manage your blocked dates.'
           : 'When the crew is collectively blocked.'
         }
@@ -467,50 +477,73 @@ export default function AvailabilityPage() {
                     <div key={i} className="text-center text-[10px] font-bold text-ink-mute py-2 uppercase tracking-wider">{d}</div>
                   ))}
                 </div>
-                <div
-                  className="grid grid-cols-7 gap-0.5 p-3"
-                  onTouchStart={(e) => { const iso = isoFromTouch(e.touches[0]); if (iso) startDrag(iso) }}
-                  onTouchMove={(e) => { e.preventDefault(); const iso = isoFromTouch(e.touches[0]); if (iso) moveDrag(iso) }}
-                  onTouchEnd={commitDrag}
-                >
+                <div className="calendar-grid grid grid-cols-7 gap-0.5 p-3">
                   {cells.map((iso, i) => {
                     if (!iso) return <div key={`empty-${i}`} className="aspect-square" />
                     const isPast = iso < todayISO
                     const isBlocked = blackouts.has(iso)
-                    const isPreview = previewDays.has(iso)
-                    const addPreview = isPreview && drag.current?.mode === 'add'
-                    const removePreview = isPreview && drag.current?.mode === 'remove'
+                    const isAnchor = rangeAnchor === iso
                     const isToday = iso === todayISO
                     const day = parseInt(iso.split('-')[2])
                     const record = blackoutRecords.find((r) => r.date === iso)
 
                     return (
-                      <div
+                      <button
                         key={iso}
+                        type="button"
                         data-iso={iso}
-                        onMouseDown={() => startDrag(iso)}
-                        onMouseEnter={() => moveDrag(iso)}
+                        disabled={isPast}
+                        onClick={() => void handleCalendarTap(iso)}
                         className={[
                           'aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors',
                           isPast ? 'text-ink-faint cursor-default' : 'cursor-pointer',
-                          !isPast && isBlocked && !isPreview ? 'bg-blush text-white' : '',
-                          !isPast && addPreview ? 'bg-blush-soft text-blush' : '',
-                          !isPast && removePreview ? 'bg-stone text-ink-soft' : '',
-                          !isPast && !isBlocked && !isPreview ? 'text-ink hover:bg-sand' : '',
-                          isToday && !isBlocked && !isPreview ? 'ring-1 ring-olive' : '',
+                          !isPast && isBlocked ? 'bg-blush text-white' : '',
+                          !isPast && !isBlocked ? 'text-ink hover:bg-sand' : '',
+                          isAnchor ? 'ring-2 ring-olive ring-offset-1 ring-offset-cream' : '',
+                          isToday && !isBlocked && !isAnchor ? 'ring-1 ring-olive' : '',
                         ].join(' ')}
                       >
                         <span className="leading-none">{day}</span>
-                        {record?.category && isBlocked && !isPreview && (
+                        {record?.category && isBlocked && (
                           <span className="text-[8px] leading-none mt-0.5 opacity-70">●</span>
                         )}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
               </Card>
 
-              <p className="text-xs text-ink-mute text-center mt-3">Tap or drag to block · tap again to unblock</p>
+              {/* Range-mode toggle / status row */}
+              <div className="mt-3 flex items-center gap-2">
+                {rangeMode ? (
+                  <>
+                    <span className="flex-1 truncate rounded-xl bg-olive-tint px-3 py-2 text-xs font-semibold text-olive">
+                      {rangeAnchor
+                        ? `Anchor ${formatDate(rangeAnchor, { month: 'short', day: 'numeric' })} — tap a second day to commit`
+                        : 'Tap a day to anchor the range'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearRange}
+                      className="rounded-xl bg-sand px-3 py-2 text-xs font-semibold text-ink-soft active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setRangeMode(true)}
+                    className="ml-auto rounded-xl bg-olive-tint px-3 py-2 text-xs font-semibold text-olive active:scale-95"
+                  >
+                    Block range
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-ink-mute text-center mt-3">
+                Tap a day to block · tap a blocked day to unblock · use <span className="font-semibold text-olive">Block range</span> for multi-day
+              </p>
             </div>
           )}
         </>

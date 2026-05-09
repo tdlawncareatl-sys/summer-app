@@ -213,7 +213,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="min-h-screen pb-28">{children}</div>
+      {/* Bottom padding clears the floating nav (≈7rem) plus the iPhone home
+          indicator. `safe-top` pads any iOS notch when the layout sits behind
+          the status bar in PWA mode. */}
+      <div className="min-h-screen pb-[calc(7rem+env(safe-area-inset-bottom))] safe-top">
+        {children}
+      </div>
       <BottomNav />
     </>
   )

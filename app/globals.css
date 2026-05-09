@@ -112,8 +112,13 @@
   --shadow-raised: var(--shadow-raised);
 }
 
-/* Base page */
-html, body { height: 100%; }
+/* Base page — lock the viewport so iOS PWA mode feels native (no rubber-band
+   bounce, no pinch zoom, no accidental pan). Page content scrolls inside
+   AppShell, not at the document level. */
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
 body {
   background: var(--color-sand);
   color: var(--color-ink);
@@ -121,6 +126,28 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* `manipulation` disables iOS double-tap zoom but keeps scroll & pinch where allowed. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe-area helpers. Use anywhere a sticky/fixed bottom element needs to clear
+   the iPhone home indicator (≈34px on iPhone 14/15). */
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+.safe-bottom-plus {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+}
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+/* Calendar grid taps should not double-tap-zoom or trigger text selection. */
+.calendar-grid {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Disable text selection inside interactive regions that drag */

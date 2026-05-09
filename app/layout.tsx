@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Instrument_Serif } from "next/font/google"
 import "./globals.css"
 import AppShell from "./components/AppShell"
@@ -19,6 +19,23 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "Summer Plans",
   description: "Friend group coordination for summer 2026",
+  // Tells iOS Safari to render in fullscreen when launched from the home screen.
+  appleWebApp: {
+    capable: true,
+    title: 'Summer Plans',
+    statusBarStyle: 'default',
+  },
+}
+
+// Lock the viewport so iOS doesn't pinch-zoom or pan during gestures, and
+// extend the layout edge-to-edge under the home indicator and notch.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#FCFAF6',
 }
 
 export default function RootLayout({

@@ -163,9 +163,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const [lengthDraft, setLengthDraft] = useState<number>(1)
   const [multiDayInput, setMultiDayInput] = useState(2)
+  // Two-tap range selection. `pickPhase = 'pending'` means one tap landed and
+  // the next tap completes the range; `'idle'` means a fresh tap starts a new
+  // selection. Drag is intentionally gone — taps work the same on touch and
+  // mouse and don't fight iOS's viewport gestures.
   const [selectedRange, setSelectedRange] = useState<{ start: string; end: string } | null>(null)
-  const [calPreview, setCalPreview] = useState<Set<string>>(new Set())
-  const calDrag = useRef<string | null>(null)
+  const [pickPhase, setPickPhase] = useState<'idle' | 'pending'>('idle')
   const calCardRef = useRef<HTMLDivElement | null>(null)
 
   const today = useMemo(() => new Date(), [])
@@ -636,40 +639,24 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   // ─────────── calendar interactions ───────────
 
-  function calStartDrag(iso: string) {
-    if (iso < todayISO) return
-    calDrag.current = iso
-    setCalPreview(new Set([iso]))
-    setSelectedRange(null)
-  }
-  function calMoveDrag(iso: string) {
-    if (!calDrag.current || iso < todayISO) return
-    setCalPreview(new Set(getRange(calDrag.current, iso)))
-  }
-  function calCommitDrag() {
-    if (!calDrag.current || calPreview.size === 0) {
-      calDrag.current = null
-      setCalPreview(new Set())
-      return
-    }
-    const days = [...calPreview].sort()
-    setSelectedRange({ start: days[0], end: days[days.length - 1] })
-    calDrag.current = null
-    setCalPreview(new Set())
-  }
   function handleCalendarTap(iso: string) {
     if (iso < todayISO) return
-    calDrag.current = null
-    setCalPreview(new Set())
-    setSelectedRange((current) => {
-      if (!current) return { start: iso, end: iso }
-      if (iso < current.start) return { start: iso, end: iso }
-      return { start: current.start, end: iso }
-    })
+    if (pickPhase === 'idle' || !selectedRange) {
+      // First tap — anchor a single-day pending selection.
+      setSelectedRange({ start: iso, end: iso })
+      setPickPhase('pending')
+      return
+    }
+    // Second tap — complete the range (sorted regardless of which day was tapped first).
+    const start = iso < selectedRange.start ? iso : selectedRange.start
+    const end = iso < selectedRange.start ? selectedRange.start : iso
+    setSelectedRange({ start, end })
+    setPickPhase('idle')
   }
-  function isoFromTouch(touch: { clientX: number; clientY: number }) {
-    const target = document.elementFromPoint(touch.clientX, touch.clientY)
-    return target?.getAttribute('data-iso') ?? null
+
+  function clearSelection() {
+    setSelectedRange(null)
+    setPickPhase('idle')
   }
   function prevMonth() {
     if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1) } else setCalMonth((m) => m - 1)
@@ -1161,11 +1148,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             ))}
           </div>
 
-          <div
-            className="mb-3 overflow-hidden rounded-[var(--radius-md)] border border-sand-alt"
-            onMouseUp={calCommitDrag}
-            onMouseLeave={calCommitDrag}
-          >
+          <div className="mb-3 overflow-hidden rounded-[var(--radius-md)] border border-sand-alt">
             <div className="flex items-center justify-between bg-ink px-3 py-2 text-cream">
               <button type="button"
                 onClick={prevMonth}
@@ -1190,12 +1173,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-0.5 bg-cream p-2">
+            <div className="calendar-grid grid grid-cols-7 gap-0.5 bg-cream p-2">
               {calCells.map((iso, idx) => {
                 if (!iso) return <div key={`empty-${idx}`} className="aspect-square" />
                 const isPast = iso < todayISO
-                const isInPreview = calPreview.has(iso)
                 const isInSelected = !!selectedRange && iso >= selectedRange.start && iso <= selectedRange.end
+                const isPending = pickPhase === 'pending' && !!selectedRange && iso === selectedRange.start
                 const isToday = iso === todayISO
                 const blockedCount = groupBlackouts[iso]?.length ?? 0
                 const day = parseInt(iso.split('-')[2], 10)
@@ -1206,30 +1189,29 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   cellClass = 'bg-sand-alt text-ink-faint cursor-default'
                 } else if (isInSelected) {
                   cellClass = 'bg-olive text-white font-bold cursor-pointer'
-                } else if (isInPreview) {
-                  cellClass = 'bg-olive-soft text-olive font-semibold cursor-pointer'
                 } else {
                   cellClass = `${densityClasses(density)} cursor-pointer`
                 }
 
                 return (
-                  <div
+                  <button
                     key={iso}
+                    type="button"
                     data-iso={iso}
+                    disabled={isPast}
                     onClick={() => handleCalendarTap(iso)}
-                    onMouseDown={() => calStartDrag(iso)}
-                    onMouseEnter={() => calMoveDrag(iso)}
                     className={[
                       'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-colors',
                       cellClass,
-                      isToday && !isInSelected && !isInPreview ? 'ring-1 ring-olive' : '',
+                      isToday && !isInSelected ? 'ring-1 ring-olive' : '',
+                      isPending ? 'ring-2 ring-olive ring-offset-1 ring-offset-cream' : '',
                     ].join(' ')}
                   >
                     <span className="leading-none">{day}</span>
-                    {blockedCount > 0 && !isPast && !isInSelected && !isInPreview ? (
+                    {blockedCount > 0 && !isPast && !isInSelected ? (
                       <span className="mt-0.5 text-[8px] leading-none opacity-70">{blockedCount}</span>
                     ) : null}
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -1245,13 +1227,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     : ` · ${summarizeBuckets(selectedScore.buckets)}`}
                 </span>
               ) : (
-                <span className="text-ink-mute">Tap a day to start</span>
+                <span className="text-ink-mute">
+                  {pickPhase === 'pending' ? 'Tap another day to extend, or Add to confirm' : 'Tap a day to start'}
+                </span>
               )}
             </div>
             {selectedRange ? (
               <button
                 type="button"
-                onClick={() => setSelectedRange(null)}
+                onClick={clearSelection}
                 className="rounded-xl bg-sand px-3 py-2.5 text-sm font-semibold text-ink-soft transition-all active:scale-95"
               >
                 Clear
