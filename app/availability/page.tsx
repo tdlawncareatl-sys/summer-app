@@ -438,7 +438,10 @@ export default function AvailabilityPage() {
       {pendingDays && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-ink/30 backdrop-blur-sm" onClick={() => saveWithCategory(null)} />
-          <div className="relative w-full max-w-md bg-cream rounded-t-[28px] p-6 shadow-[var(--shadow-raised)]">
+          <div
+            className="relative w-full max-w-md bg-cream rounded-t-[28px] px-6 pt-6 shadow-[var(--shadow-raised)]"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}
+          >
             <div className="w-10 h-1 bg-stone rounded-full mx-auto mb-5" />
             <p className="font-serif text-xl font-black text-ink">What&apos;s this for?</p>
             <p className="text-sm text-ink-soft mt-0.5 mb-4">{pendingDateLabel}</p>

@@ -1523,8 +1523,35 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       {/* Edit details sheet */}
       {editingDetails ? (
-        <Sheet onClose={() => setEditingDetails(false)} title="Edit details">
+        <Sheet
+          onClose={() => setEditingDetails(false)}
+          title="Edit details"
+          footer={
+            <div className="flex gap-2">
+              <button
+                form="edit-details-form"
+                type="submit"
+                disabled={!detailDraft.title.trim() || savingDetails}
+                className="flex-1 rounded-xl bg-olive py-3 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+              >
+                {savingDetails ? 'Saving…' : 'Save details'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDetails(false)
+                  setDetailDraft(eventDraftFromRecord(event))
+                  setDetailError(null)
+                }}
+                className="rounded-xl bg-sand px-4 py-3 text-sm font-semibold text-ink-soft"
+              >
+                Cancel
+              </button>
+            </div>
+          }
+        >
           <form
+            id="edit-details-form"
             onSubmit={(submittedEvent) => {
               submittedEvent.preventDefault()
               void saveDetails()
@@ -1580,26 +1607,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
               />
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                disabled={!detailDraft.title.trim() || savingDetails}
-                type="submit"
-                className="flex-1 rounded-xl bg-olive py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
-              >
-                {savingDetails ? 'Saving…' : 'Save details'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingDetails(false)
-                  setDetailDraft(eventDraftFromRecord(event))
-                  setDetailError(null)
-                }}
-                className="rounded-xl bg-sand px-4 py-2.5 text-sm font-semibold text-ink-soft"
-              >
-                Cancel
-              </button>
             </div>
           </form>
         </Sheet>
@@ -1813,10 +1820,12 @@ function Sheet({
   onClose,
   title,
   children,
+  footer,
 }: {
   onClose: () => void
   title: string
   children: ReactNode
+  footer?: ReactNode
 }) {
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
@@ -1826,8 +1835,11 @@ function Sheet({
         onClick={onClose}
         className="absolute inset-0 bg-ink/40"
       />
-      <div className="relative mx-3 mb-3 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-[24px] bg-cream p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-[var(--shadow-raised)]">
-        <div className="mb-3 flex items-center justify-between">
+      {/* Header / scrollable body / optional sticky footer. The footer always
+          stays in view above the iPhone home indicator so primary actions
+          (Save / Cancel / etc.) never get clipped on long forms. */}
+      <div className="relative mx-3 mb-3 flex max-h-[85vh] w-full max-w-md flex-col rounded-[24px] bg-cream shadow-[var(--shadow-raised)]">
+        <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-3">
           <p className="text-sm font-bold uppercase tracking-[0.14em] text-ink-mute">{title}</p>
           <button
             type="button"
@@ -1838,7 +1850,19 @@ function Sheet({
             <XIcon size={14} />
           </button>
         </div>
-        {children}
+        <div
+          className={`flex-1 overflow-y-auto px-5 ${footer ? 'pb-4' : 'pb-[calc(env(safe-area-inset-bottom)+1.25rem)]'}`}
+        >
+          {children}
+        </div>
+        {footer ? (
+          <div
+            className="shrink-0 border-t border-sand-alt bg-cream px-5 pt-4"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+          >
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   )
