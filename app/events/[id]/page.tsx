@@ -493,9 +493,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  async function confirmEvent() {
+  async function confirmEvent(chosen?: DateOption) {
     if (!event || confirming) return
-    const winner = dateOptions[0]
+    // Default to the top-ranked option, but accept any proposed date so the
+    // creator can lock in a date that isn't the auto-pick "leading" one.
+    const winner = chosen ?? dateOptions[0]
     if (!winner) {
       setDetailError('Add at least one date option before confirming the event.')
       return
@@ -1039,10 +1041,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         </Card>
       ) : null}
 
-      {/* Confirm button */}
+      {/* Confirm button — top-of-page shortcut that locks the leading option.
+          Same flow as the per-option "Lock this in" buttons below; this one
+          stays visible until the leading option has a clear winning score. */}
       {showConfirm ? (
         <button type="button"
-          onClick={confirmEvent}
+          onClick={() => void confirmEvent()}
           disabled={confirming}
           className="mb-4 w-full rounded-[var(--radius-lg)] bg-olive py-3.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] disabled:opacity-50"
         >
@@ -1160,6 +1164,23 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         </span>
                       ))}
                     </div>
+                  </div>
+                ) : null}
+
+                {isCreator ? (
+                  <div className="mt-3 border-t border-sand-alt pt-3">
+                    <button
+                      type="button"
+                      onClick={() => void confirmEvent(option)}
+                      disabled={confirming}
+                      className={[
+                        'flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all active:scale-[0.98] disabled:opacity-40',
+                        isTop ? 'bg-olive text-white' : 'bg-olive-tint text-olive',
+                      ].join(' ')}
+                    >
+                      <CheckIcon size={12} />
+                      Lock this in
+                    </button>
                   </div>
                 ) : null}
               </Card>
