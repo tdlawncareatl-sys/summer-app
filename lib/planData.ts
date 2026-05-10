@@ -29,8 +29,8 @@ export type RawDateOption = {
 export type RawVote = {
   id: string
   date_option_id: string
-  response: 'best' | 'works' | 'no' | string
-  points: number
+  response: 'works' | 'pass' | string
+  preferred: boolean
   user_id: string
 }
 
@@ -82,7 +82,7 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
     supabase.from('users').select('id, name'),
     supabase.from('events').select('id, title, description, status, created_by, created_at, confirmed_date, confirmed_end_date').order('created_at', { ascending: false }),
     supabase.from('date_options').select('id, event_id, date, end_date'),
-    supabase.from('votes').select('id, date_option_id, response, points, user_id'),
+    supabase.from('votes').select('id, date_option_id, response, preferred, user_id'),
     supabase.from('availability').select('user_id, date, category'),
     supabase.from('ideas').select('id, title, description, submitted_by, likes, created_at').order('created_at', { ascending: false }),
   ])
@@ -125,16 +125,24 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
 
     const rankedOptions = opts
       .map((option) => {
-        const totalPoints = (votesByOption[option.id] ?? []).reduce((sum, vote) => sum + vote.points, 0)
+        const optionVotes = votesByOption[option.id] ?? []
+        let worksCount = 0
+        let preferredCount = 0
+        for (const vote of optionVotes) {
+          if (vote.response === 'works') {
+            worksCount++
+            if (vote.preferred) preferredCount++
+          }
+        }
         const blockedNames = new Set<string>()
         for (const day of daysBetween(option.date, option.end_date ?? option.date)) {
           ;(blackoutsByDate[day] ?? []).forEach((name) => blockedNames.add(name))
         }
         return {
           ...option,
-          totalPoints,
+          worksCount,
+          preferredCount,
           blockedCount: blockedNames.size,
-          conflictScore: totalPoints - blockedNames.size * 2,
         }
       })
       .sort(compareRankedDateOptions)

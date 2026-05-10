@@ -24,9 +24,20 @@ import { VOTE } from '@/lib/status'
 import {
   type LengthType,
   lengthLabel,
+  normalizeLengthDays,
   normalizeLengthType,
   rangeSubLabel,
 } from '@/lib/lengthType'
+import {
+  TIME_PREFERENCE_LABELS,
+  TIME_PREFERENCES,
+  type TimePreference,
+  type VoteResponse,
+  type VoteRow,
+  rankOptions,
+  recommendationConflictsWithConfirmed,
+  tallyOption,
+} from '@/lib/voting'
 import {
   type AvailabilityRow,
   type Buckets,
@@ -59,25 +70,23 @@ import {
   XIcon,
 } from '@/app/components/icons'
 
-const RESPONSES = [
-  { label: 'Best', value: 'best', points: 3 },
-  { label: 'Works', value: 'works', points: 1 },
-  { label: 'Pass', value: 'no', points: 0 },
-] as const
-type ResponseValue = typeof RESPONSES[number]['value']
-
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
+// Voting v2 shape: works/pass attendance + optional preferred star + optional
+// time block. blocked* comes from the personal availability calendar (separate
+// signal from votes — surfaced as info, doesn't drive the recommendation).
 type DateOption = {
   id: string
   date: string
   end_date?: string | null
-  votes: { response: string; points: number; user_name: string }[]
-  totalPoints: number
+  votes: VoteRow[]
+  worksCount: number
+  passCount: number
+  preferredCount: number
+  topTimePreference: TimePreference | null
   blockedCount: number
   blockedNames: string[]
-  conflictScore: number
 }
 
 type EventRow = {
@@ -90,6 +99,8 @@ type EventRow = {
   confirmed_at?: string | null
   confirmed_date?: string | null
   confirmed_end_date?: string | null
+  confirmation_method?: 'auto' | 'manual' | null
+  confirmed_by?: string | null
   location_name?: string | null
   location_address?: string | null
   location_notes?: string | null
@@ -209,7 +220,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     ] = await Promise.all([
       supabase.from('events').select('*').eq('id', id).single(),
       supabase.from('date_options').select('id, date, end_date').eq('event_id', id).order('date', { ascending: true }),
-      supabase.from('votes').select('date_option_id, response, points, user_id'),
+      supabase.from('votes').select('date_option_id, response, preferred, time_preference, user_id'),
       supabase.from('users').select('id, name').order('name', { ascending: true }),
       supabase.from('availability').select('user_id, date'),
     ])
@@ -249,14 +260,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const relevantVotes = (votes ?? []).filter((vote) => optionIds.has(vote.date_option_id))
 
     const enriched: DateOption[] = options.map((option) => {
-      const optionVotes = relevantVotes
+      const optionVotes: VoteRow[] = relevantVotes
         .filter((vote) => vote.date_option_id === option.id)
         .map((vote) => ({
-          response: vote.response,
-          points: vote.points,
+          user_id: vote.user_id,
           user_name: userMap[vote.user_id] ?? '?',
+          response: (vote.response === 'pass' ? 'pass' : 'works') as VoteResponse,
+          preferred: !!vote.preferred,
+          time_preference: (vote.time_preference as TimePreference | null) ?? null,
         }))
-      const totalPoints = optionVotes.reduce((sum, vote) => sum + vote.points, 0)
+      const tally = tallyOption(optionVotes)
       const optionDays = getRange(option.date, option.end_date ?? option.date)
       const blockedSet = new Set<string>()
       for (const day of optionDays) (blackoutsMap[day] ?? []).forEach((n) => blockedSet.add(n))
@@ -264,10 +277,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       return {
         ...option,
         votes: optionVotes,
-        totalPoints,
+        worksCount: tally.worksCount,
+        passCount: tally.passCount,
+        preferredCount: tally.preferredCount,
+        topTimePreference: tally.topTimePreference,
         blockedCount: blockedNames.length,
         blockedNames,
-        conflictScore: totalPoints - blockedNames.length * 2,
       }
     })
 
@@ -290,11 +305,34 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const totalParticipants = participants.length
 
   const topOption = dateOptions[0]
-  const secondOption = dateOptions[1]
-  const hasVotes = (topOption?.votes.length ?? 0) > 0
-  const isLeading = hasVotes && (!secondOption || topOption.conflictScore > secondOption.conflictScore)
-  const showConfirm = !isConfirmed && isLeading
-  const myBestOptionId = dateOptions.find((option) => option.votes.find((voteRow) => voteRow.user_name === name)?.response === 'best')?.id ?? null
+
+  // Voting v2: rank by worksCount → preferredCount → date. `ranked` carries a
+  // `status` per option ('recommended' | 'tied' | null). The single
+  // recommendation (if any) drives the "Recommended" badge and the top-of-page
+  // shortcut CTA.
+  const ranked = useMemo(() => rankOptions(dateOptions, (option) => option.votes), [dateOptions])
+  const recommendedOption = useMemo(() => ranked.find((r) => r.status === 'recommended')?.option ?? null, [ranked])
+  const tiedOptionIds = useMemo(() => new Set(ranked.filter((r) => r.status === 'tied').map((r) => r.option.id)), [ranked])
+  const showConfirmShortcut = !isConfirmed && !!recommendedOption
+
+  // Identify which proposed option (if any) matches the currently confirmed
+  // date so we can compare against the new recommendation and surface a
+  // "votes have shifted" warning when they diverge.
+  const confirmedOption = useMemo(() => {
+    if (!isConfirmed || !event?.confirmed_date) return null
+    return dateOptions.find((o) =>
+      o.date === event.confirmed_date
+      && (o.end_date ?? o.date) === (event.confirmed_end_date ?? event.confirmed_date),
+    ) ?? null
+  }, [isConfirmed, event?.confirmed_date, event?.confirmed_end_date, dateOptions])
+
+  const recommendationConflicts = useMemo(
+    () => recommendationConflictsWithConfirmed(ranked, confirmedOption),
+    [ranked, confirmedOption],
+  )
+
+  const lengthDaysValue = normalizeLengthDays(event?.length_days)
+  const isShortEvent = lengthDaysValue <= 1 // couple_hours (0) or one_day (1)
 
   const headerLocationLine = event ? shortLocation(event.location_name, event.location_address) : null
   const headerAddressLine = event?.location_address?.trim() && headerLocationLine !== event.location_address?.trim()
@@ -387,102 +425,84 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     await refreshEventNotifications(actorUserId, true)
   }
 
-  function updateDateOptionsForVote(
+  // Apply a vote write optimistically. The caller passes the full intended row
+  // (or null to clear); we replace any existing vote from this user on this
+  // option and re-tally locally so the UI reflects the change immediately.
+  function applyVoteLocally(
     options: DateOption[],
     currentUserName: string,
     dateOptionId: string,
-    response: ResponseValue,
-    points: number,
+    nextVote: VoteRow | null,
   ) {
-    const next = options.map((option) => ({
-      ...option,
-      votes: option.votes.map((voteRow) => ({ ...voteRow })),
-      blockedNames: [...option.blockedNames],
-    }))
-
-    if (response === 'best') {
-      for (const option of next) {
-        if (option.id === dateOptionId) continue
-        option.votes = option.votes.filter((voteRow) => !(voteRow.user_name === currentUserName && voteRow.response === 'best'))
+    const next = options.map((option) => {
+      if (option.id !== dateOptionId) return option
+      const votes = option.votes.filter((row) => row.user_name !== currentUserName)
+      if (nextVote) votes.push(nextVote)
+      const tally = tallyOption(votes)
+      return {
+        ...option,
+        votes,
+        worksCount: tally.worksCount,
+        passCount: tally.passCount,
+        preferredCount: tally.preferredCount,
+        topTimePreference: tally.topTimePreference,
       }
-    }
-
-    const target = next.find((option) => option.id === dateOptionId)
-    if (!target) return next
-
-    const existing = target.votes.find((voteRow) => voteRow.user_name === currentUserName)
-    if (existing) {
-      if (existing.response === response) {
-        target.votes = target.votes.filter((voteRow) => voteRow.user_name !== currentUserName)
-      } else {
-        existing.response = response
-        existing.points = points
-      }
-    } else {
-      target.votes.push({
-        user_name: currentUserName,
-        response,
-        points,
-      })
-    }
-
-    for (const option of next) {
-      option.totalPoints = option.votes.reduce((sum, voteRow) => sum + voteRow.points, 0)
-      option.conflictScore = option.totalPoints - option.blockedCount * 2
-    }
-
+    })
     next.sort(compareRankedDateOptions)
     return next
   }
 
-  async function vote(dateOptionId: string, response: ResponseValue, points: number) {
+  // Generic write — upsert the vote row, delete-if-clearing. Used by all three
+  // vote actions (toggle works/pass, toggle preferred, set time preference).
+  async function writeVote(dateOptionId: string, payload: { response: VoteResponse; preferred: boolean; time_preference: TimePreference | null } | null) {
     if (!name || voting) return
     setVoting(dateOptionId)
     setDetailError(null)
     const previousDateOptions = dateOptions
-    setDateOptions((current) => updateDateOptionsForVote(current, name, dateOptionId, response, points))
+
+    const nextLocal: VoteRow | null = payload ? {
+      user_id: '__optimistic__',
+      user_name: name,
+      response: payload.response,
+      preferred: payload.preferred,
+      time_preference: payload.time_preference,
+    } : null
+    setDateOptions((current) => applyVoteLocally(current, name, dateOptionId, nextLocal))
 
     try {
       const userId = await ensureUser(name)
+      if (payload === null) {
+        const { error } = await supabase
+          .from('votes')
+          .delete()
+          .eq('date_option_id', dateOptionId)
+          .eq('user_id', userId)
+        if (error) throw error
+      } else {
+        // `points` is kept on the table for backward compat — set it to 1 for
+        // works and 0 for pass so any unmigrated reader still sorts sanely.
+        const points = payload.response === 'works' ? 1 : 0
+        const { data: existing, error: existingError } = await supabase
+          .from('votes')
+          .select('id')
+          .eq('date_option_id', dateOptionId)
+          .eq('user_id', userId)
+          .maybeSingle()
+        if (existingError) throw existingError
 
-      if (response === 'best') {
-        const otherIds = dateOptions.filter((option) => option.id !== dateOptionId).map((option) => option.id)
-        if (otherIds.length > 0) {
-          const { data: previousBest, error: previousBestError } = await supabase
+        if (existing) {
+          const { error } = await supabase
             .from('votes')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('response', 'best')
-            .in('date_option_id', otherIds)
-          if (previousBestError) throw previousBestError
-          if (previousBest && previousBest.length > 0) {
-            const { error: clearBestError } = await supabase.from('votes').delete().in('id', previousBest.map((row) => row.id))
-            if (clearBestError) throw clearBestError
-          }
-        }
-      }
-
-      const { data: existing, error: existingError } = await supabase
-        .from('votes')
-        .select('id, response')
-        .eq('date_option_id', dateOptionId)
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (existingError) throw existingError
-
-      if (existing) {
-        if (existing.response === response) {
-          const { error } = await supabase.from('votes').delete().eq('id', existing.id)
+            .update({ ...payload, points })
+            .eq('id', existing.id)
           if (error) throw error
         } else {
-          const { error } = await supabase.from('votes').update({ response, points }).eq('id', existing.id)
+          const { error } = await supabase
+            .from('votes')
+            .insert({ date_option_id: dateOptionId, user_id: userId, points, ...payload })
           if (error) throw error
         }
-      } else {
-        const { error } = await supabase.from('votes').insert({ date_option_id: dateOptionId, user_id: userId, response, points })
-        if (error) throw error
       }
-
       void loadAll({ blocking: false })
       await refreshEventNotifications(userId, true)
     } catch (error) {
@@ -493,24 +513,84 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  function myVoteOn(option: DateOption): VoteRow | null {
+    return option.votes.find((row) => row.user_name === name) ?? null
+  }
+
+  // High-level vote actions called from the UI:
+  async function voteWorksPass(option: DateOption, response: VoteResponse) {
+    const existing = myVoteOn(option)
+    // Tapping the active state clears the vote entirely.
+    if (existing && existing.response === response) {
+      await writeVote(option.id, null)
+      return
+    }
+    if (response === 'pass') {
+      // Pass clears preferred + time preference per spec.
+      await writeVote(option.id, { response: 'pass', preferred: false, time_preference: null })
+    } else {
+      // Works preserves an existing preferred / time preference where possible.
+      await writeVote(option.id, {
+        response: 'works',
+        preferred: existing?.preferred ?? false,
+        time_preference: existing?.time_preference ?? null,
+      })
+    }
+  }
+
+  async function togglePreferred(option: DateOption) {
+    const existing = myVoteOn(option)
+    // Preferred only makes sense on a works vote — promote a missing/pass vote
+    // to works so the star reads as "I'm in AND this is better for me".
+    if (!existing || existing.response !== 'works') {
+      await writeVote(option.id, { response: 'works', preferred: true, time_preference: existing?.time_preference ?? null })
+      return
+    }
+    await writeVote(option.id, {
+      response: 'works',
+      preferred: !existing.preferred,
+      time_preference: existing.time_preference,
+    })
+  }
+
+  async function setTimePreferenceFor(option: DateOption, slot: TimePreference) {
+    const existing = myVoteOn(option)
+    if (!existing || existing.response !== 'works') return // gated in UI too
+    const next: TimePreference | null = existing.time_preference === slot ? null : slot
+    await writeVote(option.id, {
+      response: 'works',
+      preferred: existing.preferred,
+      time_preference: next,
+    })
+  }
+
   async function confirmEvent(chosen?: DateOption) {
     if (!event || confirming) return
-    // Default to the top-ranked option, but accept any proposed date so the
-    // creator can lock in a date that isn't the auto-pick "leading" one.
-    const winner = chosen ?? dateOptions[0]
+    // Default to the system recommendation; allow any user to lock in any
+    // proposed date manually. `confirmation_method` records which path was
+    // taken so we can show why a non-recommended date is locked.
+    const winner = chosen ?? recommendedOption ?? dateOptions[0]
     if (!winner) {
       setDetailError('Add at least one date option before confirming the event.')
       return
     }
+    if (typeof window !== 'undefined' && chosen && recommendedOption && chosen.id !== recommendedOption.id) {
+      if (!window.confirm(`Lock in ${formatRange(chosen.date, chosen.end_date)}? This is different from the recommended date.`)) {
+        return
+      }
+    }
     setConfirming(true)
     setDetailError(null)
     const confirmedAt = new Date().toISOString()
+    const isManual = !!chosen
     const actorUserId = name ? await ensureUser(name) : null
     const { error } = await supabase.from('events').update({
       status: 'confirmed',
       confirmed_at: confirmedAt,
       confirmed_date: winner.date,
       confirmed_end_date: winner.end_date ?? null,
+      confirmation_method: isManual ? 'manual' : 'auto',
+      confirmed_by: name ?? event.created_by ?? null,
     }).eq('id', event.id)
     if (error) {
       setDetailError(error.message)
@@ -523,6 +603,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       confirmed_at: confirmedAt,
       confirmed_date: winner.date,
       confirmed_end_date: winner.end_date,
+      confirmation_method: isManual ? 'manual' : 'auto',
+      confirmed_by: name ?? event.created_by ?? null,
     })
     setDetailMessage('Event confirmed.')
     setConfirming(false)
@@ -1041,17 +1123,30 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         </Card>
       ) : null}
 
-      {/* Confirm button — top-of-page shortcut that locks the leading option.
-          Same flow as the per-option "Lock this in" buttons below; this one
-          stays visible until the leading option has a clear winning score. */}
-      {showConfirm ? (
+      {/* Top-of-page shortcut — locks in the system-recommended date. Per-option
+          "Lock this date" buttons below let any user pick a different option,
+          which is logged as a manual confirmation. */}
+      {showConfirmShortcut && recommendedOption ? (
         <button type="button"
           onClick={() => void confirmEvent()}
           disabled={confirming}
           className="mb-4 w-full rounded-[var(--radius-lg)] bg-olive py-3.5 text-sm font-bold text-white shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] disabled:opacity-50"
         >
-          {confirming ? 'Confirming…' : `Lock it in — ${formatRange(topOption.date, topOption.end_date)}`}
+          {confirming ? 'Confirming…' : `Lock in recommended — ${formatRange(recommendedOption.date, recommendedOption.end_date)}`}
         </button>
+      ) : null}
+
+      {/* Warning when a confirmed date is no longer the recommendation. We do
+          NOT auto-change the locked date — surfacing the divergence lets the
+          group decide whether to unlock and re-lock. */}
+      {recommendationConflicts && recommendedOption ? (
+        <Card className="mb-4 bg-amber-tint">
+          <p className="text-sm font-semibold text-amber">Votes have shifted since this date was locked in</p>
+          <p className="mt-1 text-xs text-amber">
+            New recommendation: <span className="font-bold">{formatRange(recommendedOption.date, recommendedOption.end_date)}</span>.
+            Unlock the event to lock a different date in.
+          </p>
+        </Card>
       ) : null}
 
       {/* Best Available */}
@@ -1086,67 +1181,135 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       {dateOptions.length > 0 && !isConfirmed ? (
         <div className="mb-4 flex flex-col gap-2.5">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Proposed dates</p>
-          {dateOptions.map((option, index) => {
-            const myResponse = option.votes.find((row) => row.user_name === name)?.response ?? null
-            const isTop = index === 0 && option.conflictScore > 0
+          {dateOptions.map((option) => {
+            const myVote = myVoteOn(option)
+            const myResponse: VoteResponse | null = myVote?.response ?? null
+            const myPreferred = !!myVote?.preferred
+            const myTimePref = myVote?.time_preference ?? null
+            const isRecommended = recommendedOption?.id === option.id
+            const isTied = tiedOptionIds.has(option.id)
             const isRange = !!option.end_date && option.end_date !== option.date
+            const cardClass = isRecommended ? 'ring-1 ring-olive' : isTied ? 'ring-1 ring-amber' : ''
+            const lockClass = isRecommended ? 'bg-olive text-white' : 'bg-olive-tint text-olive'
             return (
-              <Card key={option.id} className={isTop ? 'ring-1 ring-olive' : ''}>
+              <Card key={option.id} className={cardClass}>
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    {isTop ? <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-olive">Leading</p> : null}
+                    {isRecommended ? (
+                      <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-olive">Recommended</p>
+                    ) : isTied ? (
+                      <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-amber">Tied for top</p>
+                    ) : null}
                     <p className="font-bold text-ink">
                       {isRange
                         ? `${formatDay(option.date, { month: 'short', day: 'numeric' })} – ${formatDay(option.end_date!, { month: 'short', day: 'numeric' })}`
                         : formatDay(option.date)}
                     </p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-ink-soft">
-                        {option.totalPoints}pt · {option.votes.length} vote{option.votes.length !== 1 ? 's' : ''}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-semibold text-olive">
+                        Works: {option.worksCount}{participants.length ? ` / ${participants.length}` : ''}
                       </span>
-                      {option.blockedCount === 0 ? (
-                        <span className="rounded-full bg-olive-tint px-2 py-0.5 text-xs font-semibold text-olive">No conflicts</span>
-                      ) : (
-                        <span className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-semibold text-blush">
-                          {option.blockedCount} blocked
+                      {option.preferredCount > 0 ? (
+                        <span className="text-ink-soft">Preferred: {option.preferredCount}</span>
+                      ) : null}
+                      {option.passCount > 0 ? (
+                        <span className="text-blush">Pass: {option.passCount}</span>
+                      ) : null}
+                      {isShortEvent && option.topTimePreference ? (
+                        <span className="rounded-full bg-sand px-2 py-0.5 font-semibold text-ink-soft">
+                          Top time: {TIME_PREFERENCE_LABELS[option.topTimePreference]}
                         </span>
-                      )}
+                      ) : null}
+                      {option.blockedCount > 0 ? (
+                        <span className="rounded-full bg-blush-tint px-2 py-0.5 font-semibold text-blush">
+                          {option.blockedCount} on calendar
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {name ? (
-                    <div className="flex shrink-0 gap-1">
-                      {RESPONSES.map((response) => {
-                        const isActive = myResponse === response.value
-                        const bestTaken = response.value === 'best' && myBestOptionId !== null && myBestOptionId !== option.id
-                        const tone = response.value === 'best' ? VOTE.best : response.value === 'works' ? VOTE.works : VOTE.pass
-                        return (
-                          <button type="button"
-                            key={response.value}
-                            onClick={() => vote(option.id, response.value, response.points)}
-                            disabled={voting === option.id}
-                            title={bestTaken ? 'You already picked Best — click here to move it.' : undefined}
-                            className={[
-                              'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95',
-                              isActive ? tone.strong : bestTaken ? 'bg-sand text-ink-faint' : 'bg-sand text-ink-soft hover:bg-sand-alt',
-                            ].join(' ')}
-                          >
-                            {response.label}
-                          </button>
-                        )
-                      })}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void voteWorksPass(option, 'works')}
+                        disabled={voting === option.id}
+                        aria-pressed={myResponse === 'works'}
+                        className={[
+                          'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95',
+                          myResponse === 'works' ? VOTE.works.strong : 'bg-sand text-ink-soft hover:bg-sand-alt',
+                        ].join(' ')}
+                      >
+                        Works
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void voteWorksPass(option, 'pass')}
+                        disabled={voting === option.id}
+                        aria-pressed={myResponse === 'pass'}
+                        className={[
+                          'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all active:scale-95',
+                          myResponse === 'pass' ? VOTE.pass.strong : 'bg-sand text-ink-soft hover:bg-sand-alt',
+                        ].join(' ')}
+                      >
+                        Pass
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void togglePreferred(option)}
+                        disabled={voting === option.id}
+                        aria-pressed={myPreferred}
+                        aria-label={myPreferred ? 'Remove preferred mark' : 'Mark as preferred (tie-breaker)'}
+                        title={myPreferred ? 'Remove preferred mark' : 'Mark as preferred (tie-breaker)'}
+                        className={[
+                          'inline-flex h-7 w-7 items-center justify-center rounded-full text-base transition-all active:scale-95',
+                          myPreferred ? 'bg-amber-tint text-amber' : 'bg-sand text-ink-faint hover:text-ink-soft',
+                        ].join(' ')}
+                      >
+                        {myPreferred ? '★' : '☆'}
+                      </button>
                     </div>
                   ) : null}
                 </div>
 
+                {/* Time block preference — only for short events, only when I'm marked Works */}
+                {isShortEvent && myResponse === 'works' ? (
+                  <div className="mt-2 rounded-xl bg-sand-alt/60 px-3 py-2">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-mute">What time works best?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TIME_PREFERENCES.map((slot) => {
+                        const isActive = myTimePref === slot
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => void setTimePreferenceFor(option, slot)}
+                            disabled={voting === option.id}
+                            className={[
+                              'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all active:scale-95',
+                              isActive ? 'bg-olive text-white' : 'bg-cream text-ink-soft border border-stone/50 hover:text-ink',
+                            ].join(' ')}
+                          >
+                            {TIME_PREFERENCE_LABELS[slot]}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 {option.votes.length > 0 ? (
-                  <div className="border-t border-sand-alt pt-2">
+                  <div className="mt-2 border-t border-sand-alt pt-2">
                     <div className="flex flex-wrap gap-1.5">
                       {option.votes.map((row) => {
-                        const tone = row.response === 'best' ? VOTE.best : row.response === 'works' ? VOTE.works : VOTE.pass
+                        const tone = row.response === 'works' ? VOTE.works : VOTE.pass
                         return (
-                          <span key={row.user_name} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tone.tint} ${tone.text}`}>
+                          <span
+                            key={row.user_name}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tone.tint} ${tone.text}`}
+                          >
                             <Avatar name={row.user_name} size={14} />
                             {row.user_name}
+                            {row.preferred ? <span className="text-amber">★</span> : null}
                           </span>
                         )
                       })}
@@ -1156,7 +1319,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
                 {option.blockedNames.length > 0 ? (
                   <div className="mt-2 border-t border-sand-alt pt-2">
-                    <p className="mb-1.5 text-xs text-ink-mute">Can&apos;t make it ({option.blockedCount})</p>
+                    <p className="mb-1.5 text-xs text-ink-mute">Blocked on personal calendar ({option.blockedCount})</p>
                     <div className="flex flex-wrap gap-1">
                       {option.blockedNames.map((blockedName) => (
                         <span key={blockedName} className="rounded-full bg-blush-tint px-2 py-0.5 text-xs font-medium text-blush">
@@ -1167,7 +1330,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   </div>
                 ) : null}
 
-                {isCreator ? (
+                {name ? (
                   <div className="mt-3 border-t border-sand-alt pt-3">
                     <button
                       type="button"
@@ -1175,11 +1338,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       disabled={confirming}
                       className={[
                         'flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-all active:scale-[0.98] disabled:opacity-40',
-                        isTop ? 'bg-olive text-white' : 'bg-olive-tint text-olive',
+                        lockClass,
                       ].join(' ')}
                     >
                       <CheckIcon size={12} />
-                      Lock this in
+                      Lock this date
                     </button>
                   </div>
                 ) : null}

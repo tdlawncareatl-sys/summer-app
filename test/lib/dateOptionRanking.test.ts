@@ -2,26 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { compareRankedDateOptions } from '@/lib/dateOptionRanking'
 
 describe('compareRankedDateOptions', () => {
-  it('prioritizes higher conflict scores', () => {
+  it('prioritizes higher worksCount', () => {
     const ranked = [
-      { date: '2026-06-10', conflictScore: 1, blockedCount: 1 },
-      { date: '2026-06-11', conflictScore: 5, blockedCount: 3 },
+      { date: '2026-06-10', worksCount: 1, preferredCount: 5 },
+      { date: '2026-06-11', worksCount: 4, preferredCount: 0 },
     ].sort(compareRankedDateOptions)
 
     expect(ranked[0].date).toBe('2026-06-11')
   })
 
-  it('breaks score ties by fewer blocked people, then earlier dates', () => {
+  it('breaks worksCount ties by higher preferredCount, then earlier dates', () => {
     const ranked = [
-      { date: '2026-06-14', conflictScore: 3, blockedCount: 1 },
-      { date: '2026-06-12', conflictScore: 3, blockedCount: 1 },
-      { date: '2026-06-13', conflictScore: 3, blockedCount: 2 },
+      { date: '2026-06-14', worksCount: 3, preferredCount: 1 },
+      { date: '2026-06-12', worksCount: 3, preferredCount: 1 },
+      { date: '2026-06-13', worksCount: 3, preferredCount: 2 },
     ].sort(compareRankedDateOptions)
 
     expect(ranked.map((option) => option.date)).toEqual([
-      '2026-06-12',
+      '2026-06-13', // most preferred
+      '2026-06-12', // tied on works+preferred, earlier
       '2026-06-14',
-      '2026-06-13',
     ])
   })
 })
