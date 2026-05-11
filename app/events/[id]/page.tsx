@@ -541,18 +541,104 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   async function togglePreferred(option: DateOption) {
+    if (!name || voting) return
     const existing = myVoteOn(option)
-    // Preferred only makes sense on a works vote — promote a missing/pass vote
-    // to works so the star reads as "I'm in AND this is better for me".
-    if (!existing || existing.response !== 'works') {
-      await writeVote(option.id, { response: 'works', preferred: true, time_preference: existing?.time_preference ?? null })
+
+    // Toggling OFF is simple — flip preferred to false on this option, leaving
+    // the works vote intact. Goes through the shared single-option write path.
+    if (existing && existing.preferred) {
+      await writeVote(option.id, {
+        response: 'works',
+        preferred: false,
+        time_preference: existing.time_preference,
+      })
       return
     }
-    await writeVote(option.id, {
+
+    // Toggling ON makes this the user's single preferred date for the event.
+    // Demote any other preferred=true rows from this user before writing.
+    setVoting(option.id)
+    setDetailError(null)
+    const previousDateOptions = dateOptions
+
+    const nextLocal: VoteRow = {
+      user_id: '__optimistic__',
+      user_name: name,
       response: 'works',
-      preferred: !existing.preferred,
-      time_preference: existing.time_preference,
+      preferred: true,
+      time_preference: existing?.time_preference ?? null,
+    }
+
+    // Optimistic: clear my preferred on every other option's vote, then upsert
+    // this option's vote (handles the "promote from missing/pass to works"
+    // case via applyVoteLocally).
+    setDateOptions((current) => {
+      const demoted = current.map((opt) => {
+        if (opt.id === option.id) return opt
+        const votes = opt.votes.map((row) =>
+          row.user_name === name && row.preferred ? { ...row, preferred: false } : row,
+        )
+        const tally = tallyOption(votes)
+        return {
+          ...opt,
+          votes,
+          worksCount: tally.worksCount,
+          passCount: tally.passCount,
+          preferredCount: tally.preferredCount,
+          topTimePreference: tally.topTimePreference,
+        }
+      })
+      return applyVoteLocally(demoted, name, option.id, nextLocal)
     })
+
+    try {
+      const userId = await ensureUser(name)
+      const otherIds = dateOptions.filter((o) => o.id !== option.id).map((o) => o.id)
+      if (otherIds.length > 0) {
+        const { error: demoteError } = await supabase
+          .from('votes')
+          .update({ preferred: false })
+          .eq('user_id', userId)
+          .eq('preferred', true)
+          .in('date_option_id', otherIds)
+        if (demoteError) throw demoteError
+      }
+
+      const points = 1
+      const { data: existingRow, error: existingError } = await supabase
+        .from('votes')
+        .select('id')
+        .eq('date_option_id', option.id)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (existingError) throw existingError
+
+      const payload = {
+        response: 'works' as const,
+        preferred: true,
+        time_preference: nextLocal.time_preference,
+        points,
+      }
+      if (existingRow) {
+        const { error } = await supabase.from('votes').update(payload).eq('id', existingRow.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('votes').insert({
+          date_option_id: option.id,
+          user_id: userId,
+          ...payload,
+        })
+        if (error) throw error
+      }
+
+      void loadAll({ blocking: false })
+      await refreshEventNotifications(userId, true)
+    } catch (error) {
+      setDateOptions(previousDateOptions)
+      setDetailError(error instanceof Error ? error.message : 'Could not save your vote.')
+    } finally {
+      setVoting(null)
+    }
   }
 
   async function setTimePreferenceFor(option: DateOption, slot: TimePreference) {
