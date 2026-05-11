@@ -332,7 +332,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   )
 
   const lengthDaysValue = normalizeLengthDays(event?.length_days)
-  const isShortEvent = lengthDaysValue <= 1 // couple_hours (0) or one_day (1)
+  // Time blocks only apply to couple-hour events. A full-day plan already
+  // implies the whole day; multi-day trips need a date, not a slot.
+  const isShortEvent = lengthDaysValue === 0
 
   const headerLocationLine = event ? shortLocation(event.location_name, event.location_address) : null
   const headerAddressLine = event?.location_address?.trim() && headerLocationLine !== event.location_address?.trim()
