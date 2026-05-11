@@ -26,14 +26,17 @@ begin
   end if;
 end $$;
 
+-- Drop the OLD response check before migrating data — the old constraint
+-- only permitted ('best','works','no'), so writing 'pass' would fail against
+-- it even though it's valid under the new model.
+alter table votes drop constraint if exists votes_response_check;
+
 -- Carry the old "best" preference signal forward, then collapse to works/pass.
 update votes set preferred = true where response = 'best' and preferred = false;
 update votes set response = 'works' where response = 'best';
 update votes set response = 'pass'  where response = 'no';
 
--- Swap the response check constraint to the new value set. Done last so the
--- update above doesn't trip over a tighter check than the data currently has.
-alter table votes drop constraint if exists votes_response_check;
+-- Add the new constraint now that all rows are in the new value set.
 alter table votes add constraint votes_response_check
   check (response in ('works','pass'));
 
