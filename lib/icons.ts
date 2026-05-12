@@ -14,9 +14,10 @@ import {
   ShareNetwork, Copy, Note,
   // activities
   TreePalm, FilmSlate, Mountains, Footprints,
-  PingPong, GameController, Flag, Boat,
+  PingPong, GameController, Flag,
   Pizza, Tent, Drop, PicnicTable, BowlFood,
 } from '@phosphor-icons/react'
+import { PlankSinatra } from '@/app/components/customIcons'
 
 export const icons = {
   // system / ui
@@ -51,7 +52,8 @@ export const icons = {
   paddle: PingPong,
   game: GameController,
   flag: Flag,
-  boat: Boat,
+  // Plank Sinatra — the lake means our boat, not a generic sailboat.
+  boat: PlankSinatra,
   pizza: Pizza,
   tent: Tent,
   droplet: Drop,
