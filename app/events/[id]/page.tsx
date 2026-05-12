@@ -55,6 +55,7 @@ import IconTile from '@/app/components/IconTile'
 import Avatar from '@/app/components/Avatar'
 import EventLocationFields from '@/app/components/EventLocationFields'
 import Icon from '@/app/components/Icon'
+import AddToCalendarButton from '@/app/components/AddToCalendarButton'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -1193,6 +1194,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 </p>
               )
             })()}
+            <div className="mt-3 flex">
+              <AddToCalendarButton eventId={event.id} variant="onOlive" />
+            </div>
           </div>
         </Card>
       ) : null}

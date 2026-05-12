@@ -11,6 +11,7 @@ import {
   type NotificationTone,
 } from '@/lib/notifications'
 import Icon from './Icon'
+import AddToCalendarButton from './AddToCalendarButton'
 import type { IconName } from '@/lib/icons'
 
 const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
@@ -203,27 +204,37 @@ export default function NotificationsBell() {
                     const unread = !item.read_at
                     const iconName = iconFor(item)
                     const tone = TONE_STYLES[item.tone]
+                    const showAddToCalendar = item.type === 'event_confirmed' && !!item.event_id
                     return (
-                      <Link
+                      <div
                         key={item.id}
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className="flex gap-3 rounded-[16px] p-3 transition-colors hover:bg-sand"
+                        className="flex flex-col gap-2 rounded-[16px] p-3 transition-colors hover:bg-sand"
                       >
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
-                          <Icon name={iconName} size={18} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-start justify-between gap-2">
-                            <span className="text-sm font-semibold leading-5 text-ink">{item.title}</span>
-                            {unread && (
-                              <span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.badge}`} />
-                            )}
+                        <Link
+                          href={item.href}
+                          onClick={() => setOpen(false)}
+                          className="flex gap-3"
+                        >
+                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
+                            <Icon name={iconName} size={18} />
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-ink-soft">{item.body}</span>
-                          <span className="mt-1.5 block text-[11px] text-ink-mute">{formatWhen(item.scheduled_for)}</span>
-                        </span>
-                      </Link>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-start justify-between gap-2">
+                              <span className="text-sm font-semibold leading-5 text-ink">{item.title}</span>
+                              {unread && (
+                                <span className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.badge}`} />
+                              )}
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-ink-soft">{item.body}</span>
+                            <span className="mt-1.5 block text-[11px] text-ink-mute">{formatWhen(item.scheduled_for)}</span>
+                          </span>
+                        </Link>
+                        {showAddToCalendar ? (
+                          <div className="pl-[3.25rem]">
+                            <AddToCalendarButton eventId={item.event_id!} variant="inline" />
+                          </div>
+                        ) : null}
+                      </div>
                     )
                   })}
                 </div>
