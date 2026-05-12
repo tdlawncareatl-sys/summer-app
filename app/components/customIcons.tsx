@@ -25,20 +25,32 @@ function base({ size = 20, weight: _weight, className, ...rest }: IconProps) {
   }
 }
 
-// Plank Sinatra — the lake's signature raft: picnic table on a wood deck
-// with two blue-barrel pontoons. Replaces the generic Phosphor Boat so
-// "lake" in the app always means our boat.
+// Plank Sinatra — the lake's signature raft, slight 3/4 view so both rows of
+// barrels show. Picnic table (bench-table-bench) on a thick wood deck with
+// three barrel pontoons on each side. No motor, no people, just the raft.
 export const PlankSinatra = (p: IconProps) => (
   <svg {...base(p)}>
-    {/* Picnic table: top + two legs (pi shape) */}
+    {/* Picnic table — three stacked planks with center supports */}
+    <path d="M9 3.5 L15 3.5" />
+    <path d="M8 5.5 L16 5.5" />
     <path d="M9 8 L15 8" />
-    <path d="M10 8 L10 12" />
-    <path d="M14 8 L14 12" />
-    {/* Deck plank (two parallel strokes give it thickness) */}
-    <path d="M2 13 L22 13" />
-    <path d="M2 15 L22 15" />
-    {/* Two barrel pontoons */}
-    <rect x="3" y="16" width="6" height="3" rx="1.5" />
-    <rect x="15" y="16" width="6" height="3" rx="1.5" />
+    <path d="M10.5 3.5 L10.5 8" />
+    <path d="M13.5 3.5 L13.5 8" />
+
+    {/* Back row of 3 barrels — humps peeking above the deck */}
+    <path d="M4 11 Q5 9.5 6 11" />
+    <path d="M11 11 Q12 9.5 13 11" />
+    <path d="M18 11 Q19 9.5 20 11" />
+
+    {/* Deck — rectangle with visible thickness */}
+    <path d="M2 11 L22 11" />
+    <path d="M2 14 L22 14" />
+    <path d="M2 11 L2 14" />
+    <path d="M22 11 L22 14" />
+
+    {/* Front row of 3 barrels — full rounded cylinders */}
+    <rect x="2.5" y="15" width="5" height="3" rx="1.5" />
+    <rect x="9.5" y="15" width="5" height="3" rx="1.5" />
+    <rect x="16.5" y="15" width="5" height="3" rx="1.5" />
   </svg>
 )
