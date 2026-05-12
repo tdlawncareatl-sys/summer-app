@@ -1,0 +1,62 @@
+// Typed icon registry. One source of truth for every icon name the app uses.
+// Maps to Phosphor Regular by default. Add a new icon? Add it here first, then
+// reference it everywhere as `<Icon name="..." />`.
+//
+// To see every icon at a glance, open /icon-library.
+
+import {
+  // system
+  Sun, Bell, Plus, ArrowRight,
+  CaretRight, CaretLeft, CaretDown,
+  House, Calendar, Lightbulb,
+  User, Users, Star, Check, X,
+  Clock, MapPin, Info, PencilSimple, DotsThree,
+  ShareNetwork, Copy, Note,
+  // activities
+  TreePalm, FilmSlate, Mountains, Footprints,
+  PingPong, GameController, Flag, Boat,
+  Pizza, Tent, Drop, PicnicTable, BowlFood,
+} from '@phosphor-icons/react'
+
+export const icons = {
+  // system / ui
+  sun: Sun,
+  bell: Bell,
+  plus: Plus,
+  arrowRight: ArrowRight,
+  chevronRight: CaretRight,
+  chevronLeft: CaretLeft,
+  chevronDown: CaretDown,
+  home: House,
+  calendar: Calendar,
+  lightbulb: Lightbulb,
+  user: User,
+  users: Users,
+  star: Star,
+  check: Check,
+  x: X,
+  clock: Clock,
+  mapPin: MapPin,
+  info: Info,
+  pencil: PencilSimple,
+  more: DotsThree,
+  share: ShareNetwork,
+  copy: Copy,
+  note: Note,
+  // activities (used by lib/categories.ts keyword matcher)
+  palm: TreePalm,
+  clapper: FilmSlate,
+  mountain: Mountains,
+  boot: Footprints,
+  paddle: PingPong,
+  game: GameController,
+  flag: Flag,
+  boat: Boat,
+  pizza: Pizza,
+  tent: Tent,
+  droplet: Drop,
+  picnic: PicnicTable,
+  bowl: BowlFood,
+} as const
+
+export type IconName = keyof typeof icons

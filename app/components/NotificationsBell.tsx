@@ -10,7 +10,8 @@ import {
   type NotificationItem,
   type NotificationTone,
 } from '@/lib/notifications'
-import { BellIcon, CalendarIcon, CheckIcon, LightbulbIcon, StarIcon, XIcon } from './icons'
+import Icon from './Icon'
+import type { IconName } from '@/lib/icons'
 
 const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
   olive: {
@@ -29,11 +30,11 @@ const TONE_STYLES: Record<NotificationTone, { badge: string; icon: string }> = {
 
 const BOOTSTRAP_PREFIX = 'summer-app-notifications-bootstrapped'
 
-function iconFor(item: NotificationItem) {
-  if (item.type === 'event_confirmed') return CheckIcon
-  if (item.type === 'event_reminder') return CalendarIcon
-  if (item.type === 'vote_needed') return StarIcon
-  return LightbulbIcon
+function iconFor(item: NotificationItem): IconName {
+  if (item.type === 'event_confirmed') return 'check'
+  if (item.type === 'event_reminder') return 'calendar'
+  if (item.type === 'vote_needed') return 'star'
+  return 'lightbulb'
 }
 
 function formatWhen(iso: string) {
@@ -141,7 +142,7 @@ export default function NotificationsBell() {
         className="relative text-ink transition-colors hover:text-olive"
         aria-label="Notifications"
       >
-        <BellIcon size={22} />
+        <Icon name="bell" size={22} />
         {unreadCount > 0 && (
           <span className={`absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${TONE_STYLES.terracotta.badge}`}>
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -170,7 +171,7 @@ export default function NotificationsBell() {
                 className="text-ink-faint transition-colors hover:text-ink-soft"
                 aria-label="Close"
               >
-                <XIcon size={18} />
+                <Icon name="x" size={18} />
               </button>
             </div>
 
@@ -200,7 +201,7 @@ export default function NotificationsBell() {
                 <div className="flex flex-col gap-2 p-3">
                   {items.map((item) => {
                     const unread = !item.read_at
-                    const Icon = iconFor(item)
+                    const iconName = iconFor(item)
                     const tone = TONE_STYLES[item.tone]
                     return (
                       <Link
@@ -210,7 +211,7 @@ export default function NotificationsBell() {
                         className="flex gap-3 rounded-[16px] p-3 transition-colors hover:bg-sand"
                       >
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${tone.icon}`}>
-                          <Icon size={18} />
+                          <Icon name={iconName} size={18} />
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-start justify-between gap-2">

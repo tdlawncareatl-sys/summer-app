@@ -54,21 +54,7 @@ import StatusChip from '@/app/components/StatusChip'
 import IconTile from '@/app/components/IconTile'
 import Avatar from '@/app/components/Avatar'
 import EventLocationFields from '@/app/components/EventLocationFields'
-import {
-  CalendarIcon,
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ClockIcon,
-  CopyIcon,
-  MapPinIcon,
-  MoreIcon,
-  NoteIcon,
-  PencilIcon,
-  ShareIcon,
-  UsersIcon,
-  XIcon,
-} from '@/app/components/icons'
+import Icon from '@/app/components/Icon'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -922,7 +908,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             className="-ml-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:text-ink"
             aria-label="Back to events"
           >
-            <ChevronLeftIcon size={18} />
+            <Icon name="chevronLeft" size={18} />
           </Link>
         </div>
         <Card className="mt-4">
@@ -958,7 +944,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           className="-ml-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-soft hover:text-ink"
           aria-label="Back to events"
         >
-          <ChevronLeftIcon size={18} />
+          <Icon name="chevronLeft" size={18} />
         </Link>
         <button
           type="button"
@@ -966,14 +952,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           className="-mr-2 inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-mute hover:text-ink-soft"
           aria-label="More options"
         >
-          <MoreIcon size={18} />
+          <Icon name="more" size={18} />
         </button>
       </nav>
 
       {/* Hero */}
       <header className="mb-4">
         <div className="flex items-start gap-4">
-          <IconTile Icon={category.Icon} tint={category.tint} size={84} rounded="lg" iconSize={42} />
+          <IconTile name={category.iconName} tint={category.tint} size={84} rounded="lg" iconSize={42} />
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="mb-1">
               <StatusChip
@@ -990,12 +976,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   rel="noreferrer"
                   className="mt-1.5 inline-flex items-center gap-1.5 text-[15px] font-semibold text-olive"
                 >
-                  <MapPinIcon size={14} />
+                  <Icon name="mapPin" size={14} />
                   {headerLocationLine}
                 </a>
               ) : (
                 <span className="mt-1.5 inline-flex items-center gap-1.5 text-[15px] font-semibold text-olive">
-                  <MapPinIcon size={14} />
+                  <Icon name="mapPin" size={14} />
                   {headerLocationLine}
                 </span>
               )
@@ -1004,7 +990,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <p className="mt-0.5 text-sm text-ink-soft">{headerAddressLine}</p>
             ) : null}
             <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-ink-soft">
-              <CalendarIcon size={14} />
+              <Icon name="calendar" size={14} />
               {whenLabel}
             </p>
             {summaryText ? (
@@ -1027,7 +1013,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98] disabled:opacity-50"
             title={isCreator ? undefined : 'Only the event creator can change the date'}
           >
-            <CalendarIcon size={14} />
+            <Icon name="calendar" size={14} />
             {confirming ? 'Unlocking…' : 'Change date'}
           </button>
         ) : (
@@ -1036,7 +1022,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             onClick={focusCalendar}
             className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98]"
           >
-            <CalendarIcon size={14} />
+            <Icon name="calendar" size={14} />
             Add time
           </button>
         )}
@@ -1047,7 +1033,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98] disabled:opacity-50"
           title={isCreator ? undefined : 'Only the event creator can edit details'}
         >
-          <PencilIcon size={14} />
+          <Icon name="pencil" size={14} />
           Edit details
         </button>
         <button
@@ -1055,7 +1041,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           onClick={() => void shareEvent()}
           className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98]"
         >
-          <ShareIcon size={14} />
+          <Icon name="share" size={14} />
           Share
         </button>
       </div>
@@ -1066,14 +1052,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-mute">Details</p>
         </div>
         <DetailRow
-          icon={<CalendarIcon size={14} />}
+          icon={<Icon name="calendar" size={14} />}
           label="When"
           value={whenLabel}
           onTap={focusCalendar}
           editable={!isConfirmed}
         />
         <DetailRow
-          icon={<MapPinIcon size={14} />}
+          icon={<Icon name="mapPin" size={14} />}
           label="Where"
           value={placeFullLabel}
           onTap={isCreator ? startEditingDetails : undefined}
@@ -1081,7 +1067,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           muted={!event.location_address?.trim() && !event.location_name?.trim()}
         />
         <DetailRow
-          icon={<ClockIcon size={14} />}
+          icon={<Icon name="clock" size={14} />}
           label="Length"
           value={lengthLabel(lengthType)}
           chip
@@ -1089,7 +1075,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           editable={isCreator}
         />
         <DetailRow
-          icon={<NoteIcon size={14} />}
+          icon={<Icon name="note" size={14} />}
           label="Notes"
           value={notesLabel}
           onTap={isCreator ? startEditingDetails : undefined}
@@ -1102,7 +1088,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       {/* Time pill (if set) */}
       {timeLabel ? (
         <div className="mb-4 flex items-center justify-center gap-2 rounded-[14px] bg-cream px-3 py-2 text-sm text-ink-soft border border-stone/50">
-          <ClockIcon size={14} />
+          <Icon name="clock" size={14} />
           <span className="font-medium text-ink">{timeLabel}</span>
         </div>
       ) : null}
@@ -1126,7 +1112,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
                 aria-label="Edit location details"
               >
-                <PencilIcon size={14} />
+                <Icon name="pencil" size={14} />
               </button>
             ) : null}
           </div>
@@ -1139,7 +1125,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-[14px] bg-olive px-3.5 py-2 text-sm font-semibold text-white"
                 >
-                  <MapPinIcon size={14} />
+                  <Icon name="mapPin" size={14} />
                   Open in Apple Maps
                 </a>
               ) : null}
@@ -1149,7 +1135,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   onClick={() => void copyLocation()}
                   className="inline-flex items-center gap-2 rounded-[14px] bg-sand px-3.5 py-2 text-sm font-semibold text-ink-soft"
                 >
-                  <CopyIcon size={14} />
+                  <Icon name="copy" size={14} />
                   {copyLocationLabel}
                 </button>
               ) : null}
@@ -1178,7 +1164,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest opacity-70">
-                  <CheckIcon size={14} />
+                  <Icon name="check" size={14} />
                   It&apos;s happening
                 </p>
                 <p className="font-serif text-2xl font-black leading-tight">
@@ -1259,7 +1245,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               className="mt-3 flex w-full items-center justify-center gap-1 text-sm font-semibold text-olive"
             >
               {showAllBest ? 'Show top 3 only' : 'View more dates'}
-              <ChevronRightIcon size={14} className={showAllBest ? 'rotate-[270deg]' : 'rotate-90'} />
+              <Icon name="chevronRight" size={14} className={showAllBest ? 'rotate-[270deg]' : 'rotate-90'} />
             </button>
           ) : null}
         </Card>
@@ -1429,7 +1415,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         lockClass,
                       ].join(' ')}
                     >
-                      <CheckIcon size={12} />
+                      <Icon name="check" size={12} />
                       Lock this date
                     </button>
                   </div>
@@ -1468,7 +1454,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Previous month"
               >
-                <ChevronLeftIcon size={16} />
+                <Icon name="chevronLeft" size={16} />
               </button>
               <span className="text-xs font-semibold">{MONTHS[calMonth]} {calYear}</span>
               <button type="button"
@@ -1476,7 +1462,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 className="flex h-7 w-7 items-center justify-center rounded-full transition hover:bg-white/10"
                 aria-label="Next month"
               >
-                <ChevronRightIcon size={16} />
+                <Icon name="chevronRight" size={16} />
               </button>
             </div>
 
@@ -1592,14 +1578,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           onClick={() => setShowCrew(true)}
           className="inline-flex items-center gap-2 rounded-full bg-cream px-3 py-1.5 text-left text-xs font-semibold text-ink-soft border border-stone/40"
         >
-          <UsersIcon size={12} />
+          <Icon name="users" size={12} />
           <span className="leading-tight">
             <span className="block text-[10px] uppercase tracking-[0.12em] text-ink-mute">Crew status</span>
             <span className="block text-xs text-ink-soft">
               {crewScore ? summarizeBuckets(crewScore.buckets) : totalParticipants > 0 ? `${totalParticipants} in the crew` : 'No crew data yet'}
             </span>
           </span>
-          <ChevronRightIcon size={12} />
+          <Icon name="chevronRight" size={12} />
         </button>
       </footer>
 
@@ -1607,7 +1593,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <Sheet onClose={() => setShowOptions(false)} title="Event options">
           <div className="flex flex-col gap-2">
             <SheetAction
-              icon={<ShareIcon size={14} />}
+              icon={<Icon name="share" size={14} />}
               title="Share event"
               description="Send the event link to the group."
               onClick={() => void shareEvent().finally(() => setShowOptions(false))}
@@ -1621,7 +1607,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 className="flex items-start gap-3 rounded-[16px] bg-sand px-4 py-3 text-left"
               >
                 <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-tint text-teal">
-                  <MapPinIcon size={14} />
+                  <Icon name="mapPin" size={14} />
                 </span>
                 <span>
                   <span className="block text-sm font-semibold text-ink">Open in Apple Maps</span>
@@ -1631,7 +1617,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             ) : null}
             {copyableLocation ? (
               <SheetAction
-                icon={<CopyIcon size={14} />}
+                icon={<Icon name="copy" size={14} />}
                 title={copyLocationLabel}
                 description="Copy the location for texts or navigation."
                 onClick={() => void copyLocation()}
@@ -1639,7 +1625,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             ) : null}
             {isCreator ? (
               <SheetAction
-                icon={<PencilIcon size={14} />}
+                icon={<Icon name="pencil" size={14} />}
                 title="Edit details"
                 description="Update the name, summary, location, or notes."
                 onClick={startEditingDetails}
@@ -1720,7 +1706,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     lengthDraft >= 2 ? 'border-olive bg-olive text-white' : 'border-stone'
                   }`}
                 >
-                  {lengthDraft >= 2 ? <CheckIcon size={12} /> : null}
+                  {lengthDraft >= 2 ? <Icon name="check" size={12} /> : null}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-ink">Multi-day trip</span>
@@ -1992,13 +1978,13 @@ function DetailRow({
         {chip ? (
           <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-olive-tint px-2.5 py-0.5 text-[13px] font-semibold text-olive">
             {value}
-            <ChevronRightIcon size={12} className="rotate-90" />
+            <Icon name="chevronRight" size={12} className="rotate-90" />
           </span>
         ) : (
           <p className={`mt-0.5 truncate text-[14px] font-semibold ${muted ? 'text-ink-mute' : 'text-ink'}`}>{value}</p>
         )}
       </div>
-      {editable ? <PencilIcon size={14} className="shrink-0 text-ink-mute" /> : null}
+      {editable ? <Icon name="pencil" size={14} className="shrink-0 text-ink-mute" /> : null}
     </Wrapper>
   )
 }
@@ -2031,7 +2017,7 @@ function LengthPickerRow({
           active ? 'border-olive bg-olive text-white' : 'border-stone'
         }`}
       >
-        {active ? <CheckIcon size={12} /> : null}
+        {active ? <Icon name="check" size={12} /> : null}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold text-ink">{title}</span>
@@ -2063,7 +2049,7 @@ function BestRangeRow({
       className="flex items-center gap-3 rounded-xl bg-sand px-3 py-2.5 text-left transition-all hover:bg-sand-alt active:scale-[0.99]"
     >
       <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cream text-olive border border-stone/50">
-        <CalendarIcon size={14} />
+        <Icon name="calendar" size={14} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">
@@ -2074,7 +2060,7 @@ function BestRangeRow({
         <p className="text-[11px] text-ink-mute">{rangeSubLabel(lengthType)}</p>
       </div>
       <p className={`shrink-0 text-xs font-bold ${tone}`}>{summarizeBuckets(range.buckets)}</p>
-      <ChevronRightIcon size={14} className="shrink-0 text-ink-mute" />
+      <Icon name="chevronRight" size={14} className="shrink-0 text-ink-mute" />
     </button>
   )
 }
@@ -2119,7 +2105,7 @@ function Sheet({
             className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
             aria-label="Close"
           >
-            <XIcon size={14} />
+            <Icon name="x" size={14} />
           </button>
         </div>
         <div

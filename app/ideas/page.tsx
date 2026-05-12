@@ -12,7 +12,8 @@ import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, LightbulbIcon, PlusIcon, StarIcon, UsersIcon, XIcon } from '../components/icons'
+import Icon from '../components/Icon'
+import type { IconName } from '@/lib/icons'
 
 type Idea = {
   id: string
@@ -256,7 +257,7 @@ export default function IdeasPage() {
               onClick={revealForm}
               className="inline-flex items-center gap-2 rounded-[18px] bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
             >
-              <PlusIcon size={16} />
+              <Icon name="plus" size={16} />
               Add Idea
             </button>
           </div>
@@ -288,7 +289,7 @@ export default function IdeasPage() {
                   className="text-ink-faint transition-colors hover:text-ink-soft"
                   aria-label="Close add idea form"
                 >
-                  <XIcon size={16} />
+                  <Icon name="x" size={16} />
                 </button>
               </div>
               <input
@@ -345,7 +346,7 @@ export default function IdeasPage() {
                     <option value="recent">Recent</option>
                     <option value="momentum">Momentum</option>
                   </select>
-                  <ChevronDownIcon size={14} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-ink-mute" />
+                  <Icon name="chevronDown" size={14} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-ink-mute" />
                 </div>
               </label>
             </div>
@@ -380,7 +381,7 @@ export default function IdeasPage() {
                 className="mx-auto mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
               >
                 {showAllActive ? 'Show fewer active ideas' : 'See all active ideas'}
-                <ChevronDownIcon size={14} className={showAllActive ? 'rotate-180' : ''} />
+                <Icon name="chevronDown" size={14} className={showAllActive ? 'rotate-180' : ''} />
               </button>
             )}
           </section>
@@ -453,28 +454,28 @@ function ActionRail({
           tint="sage"
           title="Add an idea"
           description="Anything you want to do."
-          Icon={LightbulbIcon}
+          iconName="lightbulb"
           onClick={onAddIdea}
         />
         <ActionRailItem
           tint="terracotta"
           title="Vote together"
           description="Help the best ideas rise."
-          Icon={UsersIcon}
+          iconName="users"
           onClick={onVoteTogether}
         />
         <ActionRailItem
           tint="teal"
           title="Plan & schedule"
           description="Turn ideas into real plans."
-          Icon={PlusIcon}
+          iconName="plus"
           onClick={onPlanAndSchedule}
         />
         <ActionRailItem
           tint="olive"
           title="Learn more"
           description="See what is waiting in the wings."
-          Icon={ChevronRightIcon}
+          iconName="chevronRight"
           onClick={onLearnMore}
         />
       </div>
@@ -483,13 +484,13 @@ function ActionRail({
 }
 
 function ActionRailItem({
-  Icon,
+  iconName,
   tint,
   title,
   description,
   onClick,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  iconName: IconName
   tint: CategoryTint
   title: string
   description: string
@@ -500,7 +501,7 @@ function ActionRailItem({
       onClick={onClick}
       className="flex flex-col items-start gap-2 px-3 py-3 text-left transition-colors hover:bg-sand-alt"
     >
-      <IconTile Icon={Icon} tint={tint} size={38} rounded="full" iconSize={18} />
+      <IconTile name={iconName} tint={tint} size={38} rounded="full" iconSize={18} />
       <div className="min-w-0">
         <p className="text-[12px] font-semibold leading-tight text-ink">{title}</p>
         <p className="mt-1 text-[11px] leading-4 text-ink-soft">{description}</p>
@@ -535,18 +536,18 @@ function IdeaRow({
   return (
     <Card className="p-3.5">
       <div className="flex items-start gap-3">
-        <IconTile Icon={category.Icon} tint={category.tint} size={68} rounded="full" />
+        <IconTile name={category.iconName} tint={category.tint} size={68} rounded="full" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="text-[20px] font-bold leading-tight text-ink">{idea.title}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
                 <span className="inline-flex items-center gap-1">
-                  <UsersIcon size={12} />
+                  <Icon name="users" size={12} />
                   {idea.likes} interested
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <StarIcon size={12} />
+                  <Icon name="star" size={12} />
                   {choice === 'best' ? 'You said best' : choice === 'works' ? 'You said works' : choice === 'pass' ? 'You passed' : 'Waiting on your take'}
                 </span>
               </div>
@@ -558,7 +559,7 @@ function IdeaRow({
                 className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
                 aria-label="Delete idea"
               >
-                <XIcon size={14} />
+                <Icon name="x" size={14} />
               </button>
             ) : null}
           </div>
@@ -581,7 +582,7 @@ function IdeaRow({
               active={choice === 'best'}
               tint="olive"
               label="Best"
-              Icon={StarIcon}
+              iconName="star"
               disabled={liking}
               onClick={() => onChoose('best')}
             />
@@ -589,7 +590,7 @@ function IdeaRow({
               active={choice === 'works'}
               tint="amber"
               label="Works"
-              Icon={CheckIcon}
+              iconName="check"
               disabled={liking}
               onClick={() => onChoose('works')}
             />
@@ -597,7 +598,7 @@ function IdeaRow({
               active={choice === 'pass'}
               tint="blush"
               label="Pass"
-              Icon={XIcon}
+              iconName="x"
               disabled={liking}
               onClick={() => onChoose('pass')}
             />
@@ -616,14 +617,14 @@ function IdeaRow({
 }
 
 function PreferenceButton({
-  Icon,
+  iconName,
   label,
   tint,
   active,
   disabled,
   onClick,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  iconName: IconName
   label: string
   tint: 'olive' | 'amber' | 'blush'
   active: boolean
@@ -644,7 +645,7 @@ function PreferenceButton({
         active ? activeClass : 'bg-sand text-ink-soft hover:bg-stone',
       ].join(' ')}
     >
-      <Icon size={13} />
+      <Icon name={iconName} size={13} />
       {label}
     </button>
   )
@@ -655,7 +656,7 @@ function BacklogCard({ idea }: { idea: Idea }) {
   return (
     <Card className="min-w-[152px] p-3">
       <div className="flex items-center gap-2.5">
-        <IconTile Icon={category.Icon} tint={category.tint} size={36} rounded="full" iconSize={18} />
+        <IconTile name={category.iconName} tint={category.tint} size={36} rounded="full" iconSize={18} />
         <div className="min-w-0">
           <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{idea.title}</p>
           <p className="mt-1 text-[11px] text-ink-mute">{idea.likes} interested</p>
@@ -672,7 +673,7 @@ function TurnedPlanCard({ event }: { event: EventLite }) {
   return (
     <LinkCard href={`/events/${event.id}`}>
       <div className="flex items-center gap-3">
-        <IconTile Icon={category.Icon} tint={category.tint} size={48} rounded="lg" />
+        <IconTile name={category.iconName} tint={category.tint} size={48} rounded="lg" />
         <div className="min-w-0 flex-1">
           <p className="text-base font-semibold text-ink">{event.title}</p>
           <p className="mt-1 text-xs text-ink-soft">
@@ -684,7 +685,7 @@ function TurnedPlanCard({ event }: { event: EventLite }) {
             <StatusChip status={status} size="xs" />
           </div>
         </div>
-        <ChevronRightIcon size={16} className="text-ink-faint" />
+        <Icon name="chevronRight" size={16} className="text-ink-faint" />
       </div>
     </LinkCard>
   )
@@ -724,7 +725,7 @@ function LinkishButton({
   return (
     <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
       {label}
-      <ChevronRightIcon size={14} />
+      <Icon name="chevronRight" size={14} />
     </button>
   )
 }
@@ -733,7 +734,7 @@ function LinkCardText({ href, label }: { href: string; label: string }) {
   return (
     <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
       {label}
-      <ChevronRightIcon size={14} />
+      <Icon name="chevronRight" size={14} />
     </Link>
   )
 }

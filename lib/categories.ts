@@ -2,23 +2,7 @@
 // consistent (palm tree = beach, paddle = pickleball, etc.) without requiring
 // a category column in the DB.
 
-import {
-  PalmIcon,
-  ClapperIcon,
-  MountainIcon,
-  BootIcon,
-  PaddleIcon,
-  GameIcon,
-  FlagIcon,
-  PaddleBoatIcon,
-  PizzaIcon,
-  TentIcon,
-  DropletIcon,
-  PicnicIcon,
-  BowlIcon,
-  CalendarIcon,
-  LightbulbIcon,
-} from '@/app/components/icons'
+import type { IconName } from '@/lib/icons'
 
 export type CategoryTint =
   | 'sage'
@@ -30,30 +14,30 @@ export type CategoryTint =
   | 'blush'
 
 export type Category = {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  iconName: IconName
   tint: CategoryTint
 }
 
-// Each entry: keyword → { icon, tint }. First match wins.
+// Each entry: keyword → { iconName, tint }. First match wins.
 const MATCHERS: { test: RegExp; category: Category }[] = [
-  { test: /\bbeach|surf|ocean\b/i,             category: { Icon: PalmIcon,       tint: 'sage' } },
-  { test: /\bmovie|film|cinema\b/i,            category: { Icon: ClapperIcon,    tint: 'lavender' } },
-  { test: /\bhik|hike|mountain|climb|trail\b/i,category: { Icon: MountainIcon,   tint: 'teal' } },
-  { test: /\bcamp|tent\b/i,                    category: { Icon: TentIcon,       tint: 'terracotta' } },
-  { test: /\blake|kayak|paddle.?board|swim|river|boat\b/i, category: { Icon: PaddleBoatIcon, tint: 'teal' } },
-  { test: /\bpickleball|tennis|padel\b/i,      category: { Icon: PaddleIcon,     tint: 'olive' } },
-  { test: /\bgolf\b/i,                         category: { Icon: FlagIcon,       tint: 'sage' } },
-  { test: /\bgame|video ?game\b/i,             category: { Icon: GameIcon,       tint: 'olive' } },
-  { test: /\bpizza|dinner|sushi|bbq|food|eat\b/i, category: { Icon: PizzaIcon,   tint: 'terracotta' } },
-  { test: /\bboots?|walk\b/i,                  category: { Icon: BootIcon,       tint: 'olive' } },
-  { test: /\bwater|rain\b/i,                   category: { Icon: DropletIcon,    tint: 'teal' } },
-  { test: /\bpicnic\b/i,                       category: { Icon: PicnicIcon,     tint: 'sage' } },
-  { test: /\bsushi|bowl|ramen\b/i,             category: { Icon: BowlIcon,       tint: 'amber' } },
-  { test: /\bidea|suggest\b/i,                 category: { Icon: LightbulbIcon,  tint: 'amber' } },
+  { test: /\bbeach|surf|ocean\b/i,             category: { iconName: 'palm',    tint: 'sage' } },
+  { test: /\bmovie|film|cinema\b/i,            category: { iconName: 'clapper', tint: 'lavender' } },
+  { test: /\bhik|hike|mountain|climb|trail\b/i,category: { iconName: 'mountain',tint: 'teal' } },
+  { test: /\bcamp|tent\b/i,                    category: { iconName: 'tent',    tint: 'terracotta' } },
+  { test: /\blake|kayak|paddle.?board|swim|river|boat\b/i, category: { iconName: 'boat', tint: 'teal' } },
+  { test: /\bpickleball|tennis|padel\b/i,      category: { iconName: 'paddle',  tint: 'olive' } },
+  { test: /\bgolf\b/i,                         category: { iconName: 'flag',    tint: 'sage' } },
+  { test: /\bgame|video ?game\b/i,             category: { iconName: 'game',    tint: 'olive' } },
+  { test: /\bpizza|dinner|sushi|bbq|food|eat\b/i, category: { iconName: 'pizza',tint: 'terracotta' } },
+  { test: /\bboots?|walk\b/i,                  category: { iconName: 'boot',    tint: 'olive' } },
+  { test: /\bwater|rain\b/i,                   category: { iconName: 'droplet', tint: 'teal' } },
+  { test: /\bpicnic\b/i,                       category: { iconName: 'picnic',  tint: 'sage' } },
+  { test: /\bsushi|bowl|ramen\b/i,             category: { iconName: 'bowl',    tint: 'amber' } },
+  { test: /\bidea|suggest\b/i,                 category: { iconName: 'lightbulb', tint: 'amber' } },
 ]
 
 // Fallback for anything that doesn't match.
-const DEFAULT_CATEGORY: Category = { Icon: CalendarIcon, tint: 'olive' }
+const DEFAULT_CATEGORY: Category = { iconName: 'calendar', tint: 'olive' }
 
 export function categoryFor(title: string | null | undefined): Category {
   if (!title) return DEFAULT_CATEGORY

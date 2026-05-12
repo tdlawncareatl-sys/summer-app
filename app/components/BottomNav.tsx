@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { HomeIcon, CalendarIcon, LightbulbIcon, UserIcon, PlusIcon } from './icons'
+import Icon from './Icon'
+import type { IconName } from '@/lib/icons'
 
-const ITEMS: { href: string; label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }> }[] = [
-  { href: '/',         label: 'Home',     Icon: HomeIcon },
-  { href: '/calendar', label: 'Calendar', Icon: CalendarIcon },
-  { href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon },
-  { href: '/me',       label: 'Me',       Icon: UserIcon },
+const ITEMS: { href: string; label: string; iconName: IconName }[] = [
+  { href: '/',         label: 'Home',     iconName: 'home' },
+  { href: '/calendar', label: 'Calendar', iconName: 'calendar' },
+  { href: '/ideas',    label: 'Ideas',    iconName: 'lightbulb' },
+  { href: '/me',       label: 'Me',       iconName: 'user' },
 ]
 
 export default function BottomNav() {
@@ -42,7 +43,7 @@ export default function BottomNav() {
                   className="flex h-14 w-14 items-center justify-center rounded-full bg-olive text-white shadow-[var(--shadow-raised)] transition-transform active:scale-95"
                   aria-label="Create"
                 >
-                  <PlusIcon size={22} />
+                  <Icon name="plus" size={22} />
                 </button>
               </div>
 
@@ -69,14 +70,14 @@ export default function BottomNav() {
               {[
                 { label: 'New event', sub: 'Propose a plan & gather votes', href: '/events', tint: 'bg-terracotta-tint text-terracotta' },
                 { label: 'New idea',  sub: 'Throw something out for the group', href: '/ideas', tint: 'bg-amber-tint text-amber' },
-                { label: 'Time block', sub: 'Mark dates you can\u2019t make it', href: '/availability', tint: 'bg-olive-tint text-olive' },
+                { label: 'Time block', sub: 'Mark dates you can’t make it', href: '/availability', tint: 'bg-olive-tint text-olive' },
               ].map((a) => (
                 <button type="button"
                   key={a.label}
                   onClick={() => { setSheetOpen(false); router.push(a.href) }}
                   className="flex items-center gap-3 rounded-[16px] bg-sand px-4 py-3 text-left transition active:scale-[0.99]"
                 >
-                  <span className={`flex h-10 w-10 items-center justify-center rounded-[14px] ${a.tint}`}><PlusIcon size={16} /></span>
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-[14px] ${a.tint}`}><Icon name="plus" size={16} /></span>
                   <span>
                     <span className="block font-semibold text-ink">{a.label}</span>
                     <span className="block text-xs text-ink-soft">{a.sub}</span>
@@ -98,10 +99,9 @@ export default function BottomNav() {
 }
 
 function NavItem({
-  href, label, Icon, active,
+  href, label, iconName, active,
 }: {
-  href: string; label: string; active: boolean;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>;
+  href: string; label: string; iconName: IconName; active: boolean
 }) {
   return (
     <Link
@@ -110,7 +110,7 @@ function NavItem({
         active ? 'text-olive' : 'text-ink-mute hover:text-ink'
       }`}
     >
-      <Icon size={22} />
+      <Icon name={iconName} size={22} />
       <span>{label}</span>
     </Link>
   )

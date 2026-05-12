@@ -3,19 +3,18 @@
 
 import Link from 'next/link'
 import IconTile from './IconTile'
+import Icon from './Icon'
 import { CategoryTint } from '@/lib/categories'
-import { ArrowRightIcon } from './icons'
-
-type IconComp = React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+import type { IconName } from '@/lib/icons'
 
 export default function SummaryTile({
-  Icon,
+  iconName,
   tint,
   title,
   description,
   href,
 }: {
-  Icon: IconComp
+  iconName: IconName
   tint: CategoryTint
   title: string
   description: string
@@ -26,7 +25,7 @@ export default function SummaryTile({
       href={href}
       className="flex flex-col gap-3 p-4 bg-cream rounded-[var(--radius-lg)] shadow-[var(--shadow-soft)] active:scale-[0.98] transition-transform"
     >
-      <IconTile Icon={Icon} tint={tint} size={52} rounded="md" />
+      <IconTile name={iconName} tint={tint} size={52} rounded="md" />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-bold text-ink leading-tight">{title}</p>
@@ -35,7 +34,7 @@ export default function SummaryTile({
       </div>
       <div className="mt-auto flex items-center justify-end">
         <span className={`w-7 h-7 rounded-full ${tintCircle(tint)} flex items-center justify-center`}>
-          <ArrowRightIcon size={14} />
+          <Icon name="arrowRight" size={14} />
         </span>
       </div>
     </Link>

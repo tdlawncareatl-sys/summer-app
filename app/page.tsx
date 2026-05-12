@@ -9,20 +9,15 @@ import PageHeader from './components/PageHeader'
 import Card from './components/Card'
 import IconTile from './components/IconTile'
 import { AvatarStack } from './components/Avatar'
-import {
-  ArrowRightIcon,
-  CalendarIcon,
-  ChevronRightIcon,
-  LightbulbIcon,
-  UsersIcon,
-} from './components/icons'
+import Icon from './components/Icon'
+import type { IconName } from '@/lib/icons'
 
 type FeatureCard = {
   href: string
   title: string
   description: string
   tint: CategoryTint
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  iconName: IconName
 }
 
 export default function Home() {
@@ -74,21 +69,21 @@ export default function Home() {
       title: 'Availability',
       description: 'Mark blackout dates and see the group.',
       tint: 'sage',
-      Icon: CalendarIcon,
+      iconName: 'calendar',
     },
     {
       href: '/events',
       title: 'Event Voting',
       description: 'Vote on dates for upcoming events.',
       tint: 'terracotta',
-      Icon: UsersIcon,
+      iconName: 'users',
     },
     {
       href: '/ideas',
       title: 'Ideas Hub',
       description: 'Suggest and browse activity ideas.',
       tint: 'olive',
-      Icon: LightbulbIcon,
+      iconName: 'lightbulb',
     },
   ]
 
@@ -172,19 +167,19 @@ function FeatureRouteCard({
   title,
   description,
   tint,
-  Icon,
+  iconName,
 }: FeatureCard) {
   return (
     <Link href={href}>
       <Card className="flex h-full min-h-[180px] flex-col gap-4 p-4">
-        <IconTile Icon={Icon} tint={tint} size={58} rounded="lg" />
+        <IconTile name={iconName} tint={tint} size={58} rounded="lg" />
         <div className="min-w-0">
           <h2 className="text-[16px] font-bold leading-tight text-ink">{title}</h2>
           <p className="mt-2 text-[13px] leading-5 text-ink-soft">{description}</p>
         </div>
         <div className="mt-auto flex justify-end">
           <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${strongTintCircle(tint)}`}>
-            <ArrowRightIcon size={16} />
+            <Icon name="arrowRight" size={16} />
           </span>
         </div>
       </Card>
@@ -201,7 +196,7 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
     <Link href={`/events/${event.id}`}>
       <Card className="overflow-hidden p-0">
         <div className="flex items-center gap-4 px-4 py-4">
-          <IconTile Icon={category.Icon} tint={category.tint} size={86} rounded="full" />
+          <IconTile name={category.iconName} tint={category.tint} size={86} rounded="full" />
           <div className="min-w-0 flex-1">
             <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${statusAccent(event.displayStatus)}`}>
               {event.displayStatus === 'voting' ? 'Event Voting' : event.displayStatus === 'hosting' ? 'Hosting' : 'Upcoming Plan'}
@@ -215,7 +210,7 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
             <div className="mt-3 flex items-center justify-between gap-3">
               <AvatarStack names={event.participantNames} max={5} size={28} />
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sage-tint text-sage">
-                <ArrowRightIcon size={18} />
+                <Icon name="arrowRight" size={18} />
               </span>
             </div>
           </div>
@@ -230,13 +225,13 @@ function UpcomingPlanCard({ event }: { event: EnrichedEvent }) {
   return (
     <Link href={`/events/${event.id}`}>
       <Card className="h-full p-3.5">
-        <IconTile Icon={category.Icon} tint={category.tint} size={64} rounded="full" />
+        <IconTile name={category.iconName} tint={category.tint} size={64} rounded="full" />
         <h3 className="mt-3 text-[16px] font-bold leading-tight text-ink">{event.title}</h3>
         <p className="mt-1 text-xs text-ink-soft">
           {event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}
         </p>
         <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-mute">
-          <UsersIcon size={13} />
+          <Icon name="users" size={13} />
           <span>{event.participantNames.length}</span>
         </div>
       </Card>
@@ -256,11 +251,11 @@ function IdeaSuggestionCard({
     <Link href="/ideas" className="min-w-[164px] max-w-[164px] shrink-0">
       <Card className="h-full p-3">
         <div className="flex items-center gap-2.5">
-          <IconTile Icon={category.Icon} tint={category.tint} size={42} rounded="full" />
+          <IconTile name={category.iconName} tint={category.tint} size={42} rounded="full" />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight text-ink line-clamp-2">{title}</p>
             <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-mute">
-              <UsersIcon size={12} />
+              <Icon name="users" size={12} />
               <span>{likes} interested</span>
             </div>
           </div>
@@ -284,7 +279,7 @@ function SectionHeader({
       <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">{title}</h2>
       <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
         {linkLabel}
-        <ChevronRightIcon size={14} />
+        <Icon name="chevronRight" size={14} />
       </Link>
     </div>
   )

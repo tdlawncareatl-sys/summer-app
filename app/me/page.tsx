@@ -18,7 +18,8 @@ import Avatar from '../components/Avatar'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
 import NotificationSettingsCard from '../components/NotificationSettingsCard'
-import { ChevronRightIcon, CalendarIcon, LightbulbIcon } from '../components/icons'
+import Icon from '../components/Icon'
+import type { IconName } from '@/lib/icons'
 
 export default function MePage() {
   const { authUser, profile, signOut } = useAuth()
@@ -166,7 +167,7 @@ export default function MePage() {
               return (
                 <Link key={ev.id} href={`/events/${ev.id}`}>
                   <Card className="flex items-center gap-3">
-                    <IconTile Icon={cat.Icon} tint={cat.tint} size={44} />
+                    <IconTile name={cat.iconName} tint={cat.tint} size={44} />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-ink truncate">{ev.title}</p>
                       <p className="text-xs text-ink-soft mt-0.5">
@@ -174,7 +175,7 @@ export default function MePage() {
                       </p>
                     </div>
                     <StatusChip status={ev.displayStatus} size="xs" />
-                    <ChevronRightIcon size={18} className="text-ink-faint" />
+                    <Icon name="chevronRight" size={18} className="text-ink-faint" />
                   </Card>
                 </Link>
               )
@@ -192,7 +193,7 @@ export default function MePage() {
               const cat = categoryFor(idea.title)
               return (
                 <Card key={idea.id} className="flex items-center gap-3">
-                  <IconTile Icon={cat.Icon} tint={cat.tint} size={40} />
+                  <IconTile name={cat.iconName} tint={cat.tint} size={40} />
                   <p className="flex-1 font-semibold text-ink text-sm truncate">{idea.title}</p>
                   <span className="text-xs font-bold text-ink-soft">{idea.likes} ♥</span>
                 </Card>
@@ -206,9 +207,9 @@ export default function MePage() {
       <section className="mb-10">
         <h2 className="font-serif text-2xl font-black text-ink tracking-tight mb-3">Shortcuts</h2>
         <Card padded={false}>
-          <NavRow Icon={CalendarIcon} tint="olive" title="Mark availability" sub="Block out your no-go dates" href="/availability" />
+          <NavRow iconName="calendar" tint="olive" title="Mark availability" sub="Block out your no-go dates" href="/availability" />
           <Divider />
-          <NavRow Icon={LightbulbIcon} tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
+          <NavRow iconName="lightbulb" tint="amber" title="Browse ideas" sub="See what the crew is into" href="/ideas" />
         </Card>
         <button type="button"
           onClick={handleSignOut}
@@ -255,9 +256,9 @@ function StatBlock({
 }
 
 function NavRow({
-  Icon, tint, title, sub, href,
+  iconName, tint, title, sub, href,
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  iconName: IconName
   tint: 'olive' | 'terracotta' | 'teal' | 'amber' | 'blush' | 'sage' | 'lavender'
   title: string
   sub: string
@@ -265,12 +266,12 @@ function NavRow({
 }) {
   return (
     <Link href={href} className="flex items-center gap-3 p-4 active:bg-sand-alt transition-colors">
-      <IconTile Icon={Icon} tint={tint} size={40} />
+      <IconTile name={iconName} tint={tint} size={40} />
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-ink">{title}</p>
         <p className="text-xs text-ink-soft">{sub}</p>
       </div>
-      <ChevronRightIcon size={18} className="text-ink-faint" />
+      <Icon name="chevronRight" size={18} className="text-ink-faint" />
     </Link>
   )
 }

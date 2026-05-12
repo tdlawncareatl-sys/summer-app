@@ -1,16 +1,19 @@
 // Rounded-square tinted tile with an icon. Used as the visual anchor
 // on home summary cards, event rows, idea cards, etc.
 
-import { CategoryTint, TINT_CLASSES } from '@/lib/categories'
+import { TINT_CLASSES } from '@/lib/categories'
+import type { CategoryTint } from '@/lib/categories'
+import type { IconName } from '@/lib/icons'
+import Icon from './Icon'
 
 export default function IconTile({
-  Icon,
+  name,
   tint = 'olive',
   size = 48,
   iconSize,
   rounded = 'md',
 }: {
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+  name: IconName
   tint?: CategoryTint
   size?: number
   iconSize?: number
@@ -26,7 +29,7 @@ export default function IconTile({
       className={`${t.bg} ${t.text} ${radius} flex items-center justify-center shrink-0`}
       style={{ width: size, height: size }}
     >
-      <Icon size={iconSize ?? Math.round(size * 0.54)} />
+      <Icon name={name} size={iconSize ?? Math.round(size * 0.54)} />
     </div>
   )
 }

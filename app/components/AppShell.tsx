@@ -1,13 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import BottomNav from './BottomNav'
 import { useAuth } from '@/lib/auth'
+
+// Public routes that render without auth or the bottom nav. Add sparingly —
+// reference / dev pages only, not real product surfaces.
+const PUBLIC_ROUTES = new Set<string>(['/icon-library'])
 
 const MIN_EMAIL_OTP_LENGTH = 6
 const MAX_EMAIL_OTP_LENGTH = 10
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>
+
   const {
     loading,
     session,

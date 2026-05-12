@@ -16,7 +16,7 @@ import Card from '../components/Card'
 import StatusChip from '../components/StatusChip'
 import IconTile from '../components/IconTile'
 import EventLocationFields from '../components/EventLocationFields'
-import { ChevronRightIcon, PlusIcon, XIcon } from '../components/icons'
+import Icon from '../components/Icon'
 import { eachDay } from '@/lib/date'
 
 type Event = {
@@ -147,7 +147,7 @@ export default function EventsPage() {
               className="w-full flex items-center gap-3 text-left"
             >
               <span className="w-10 h-10 rounded-xl bg-terracotta-tint text-terracotta flex items-center justify-center shrink-0">
-                <PlusIcon size={18} />
+                <Icon name="plus" size={18} />
               </span>
               <span className="flex-1">
                 <span className="block font-semibold text-ink">Start a new event</span>
@@ -175,7 +175,7 @@ export default function EventsPage() {
                   className="text-ink-faint hover:text-ink-soft transition-colors"
                   aria-label="Cancel"
                 >
-                  <XIcon size={16} />
+                  <Icon name="x" size={16} />
                 </button>
               </div>
               <input
@@ -284,7 +284,7 @@ export default function EventsPage() {
           return (
             <Link key={ev.id} href={`/events/${ev.id}`}>
               <Card className="flex items-center gap-3">
-                <IconTile Icon={cat.Icon} tint={cat.tint} size={48} />
+                <IconTile name={cat.iconName} tint={cat.tint} size={48} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <StatusChip status={status} size="xs" />
@@ -309,7 +309,7 @@ export default function EventsPage() {
                     </p>
                   )}
                 </div>
-                <ChevronRightIcon size={18} className="text-ink-faint" />
+                <Icon name="chevronRight" size={18} className="text-ink-faint" />
               </Card>
             </Link>
           )

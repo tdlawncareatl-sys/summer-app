@@ -15,7 +15,7 @@ import { eachDay, toLocalISODate } from '@/lib/date'
 import { useName } from '@/lib/useName'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
-import { ChevronLeftIcon, ChevronRightIcon, XIcon } from '../components/icons'
+import Icon from '../components/Icon'
 import { conflictingDatesForOptions, densityForDay } from '@/lib/availability'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -516,11 +516,11 @@ export default function AvailabilityPage() {
               <Card padded={false} className="overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
                   <button type="button" onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
-                    <ChevronLeftIcon size={16} />
+                    <Icon name="chevronLeft" size={16} />
                   </button>
                   <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
                   <button type="button" onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
-                    <ChevronRightIcon size={16} />
+                    <Icon name="chevronRight" size={16} />
                   </button>
                 </div>
                 <div className="grid grid-cols-7 bg-sand border-b border-sand-alt">
@@ -726,11 +726,11 @@ export default function AvailabilityPage() {
               <Card padded={false} className="overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-ink text-cream">
                   <button type="button" onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Previous month">
-                    <ChevronLeftIcon size={16} />
+                    <Icon name="chevronLeft" size={16} />
                   </button>
                   <span className="font-semibold text-sm">{MONTH_NAMES[month]} {year}</span>
                   <button type="button" onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition" aria-label="Next month">
-                    <ChevronRightIcon size={16} />
+                    <Icon name="chevronRight" size={16} />
                   </button>
                 </div>
                 <div className="grid grid-cols-7 bg-sand border-b border-sand-alt">
@@ -773,7 +773,7 @@ export default function AvailabilityPage() {
                       {formatDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric' })}
                     </p>
                     <button type="button" onClick={() => setSelectedDate(null)} className="text-ink-faint hover:text-ink-soft" aria-label="Close">
-                      <XIcon size={16} />
+                      <Icon name="x" size={16} />
                     </button>
                   </div>
                   {selectedDateBlocked.length === 0 ? (

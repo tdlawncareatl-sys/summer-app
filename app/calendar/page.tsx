@@ -12,7 +12,7 @@ import Card from '../components/Card'
 import StatusChip from '../components/StatusChip'
 import IconTile from '../components/IconTile'
 import { AvatarStack } from '../components/Avatar'
-import { CalendarIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, UsersIcon } from '../components/icons'
+import Icon from '../components/Icon'
 
 type ViewMode = 'month' | 'week' | 'list'
 
@@ -95,7 +95,7 @@ export default function CalendarPage() {
               href="/events"
               className="inline-flex items-center gap-2 rounded-[18px] bg-olive px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition-transform active:scale-[0.98]"
             >
-              <PlusIcon size={16} />
+              <Icon name="plus" size={16} />
               New Event
             </Link>
           </div>
@@ -110,7 +110,7 @@ export default function CalendarPage() {
             className="inline-flex items-center gap-1.5 rounded-[16px] bg-sand px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-stone"
           >
             Filters
-            <ChevronDownIcon size={14} className={filtersOpen ? 'rotate-180' : ''} />
+            <Icon name="chevronDown" size={14} className={filtersOpen ? 'rotate-180' : ''} />
           </button>
         </div>
 
@@ -146,7 +146,7 @@ export default function CalendarPage() {
               className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] bg-sand text-ink-soft transition-colors hover:bg-stone"
               aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
             >
-              <ChevronLeftIcon size={18} />
+              <Icon name="chevronLeft" size={18} />
             </button>
             <h2 className="font-serif text-xl font-black text-ink">
               {viewMode === 'month' ? formatMonthLabel(monthCursor) : formatWeekLabel(weekCursor)}
@@ -159,7 +159,7 @@ export default function CalendarPage() {
               className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] bg-sand text-ink-soft transition-colors hover:bg-stone"
               aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
             >
-              <ChevronRightIcon size={18} />
+              <Icon name="chevronRight" size={18} />
             </button>
           </div>
         )}
@@ -211,7 +211,7 @@ export default function CalendarPage() {
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive"
           >
             See week view
-            <ChevronRightIcon size={14} />
+            <Icon name="chevronRight" size={14} />
           </button>
         </div>
         <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
@@ -409,15 +409,15 @@ function EventRow({ event }: { event: EnrichedEvent }) {
         <div className="flex">
           <span className={`w-1.5 shrink-0 ${STATUS[event.displayStatus].dot}`} />
           <div className="flex flex-1 items-center gap-3 px-3 py-3">
-            <IconTile Icon={category.Icon} tint={category.tint} size={50} rounded="lg" />
+            <IconTile name={category.iconName} tint={category.tint} size={50} rounded="lg" />
             <div className="min-w-0 flex-1">
               <p className="text-base font-semibold text-ink">{event.title}</p>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-soft">
-                <CalendarIcon size={12} />
+                <Icon name="calendar" size={12} />
                 <span>{event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}</span>
               </div>
               <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-mute">
-                <UsersIcon size={12} />
+                <Icon name="users" size={12} />
                 <span>{event.participantNames.length} people in the loop</span>
               </div>
             </div>
@@ -474,7 +474,7 @@ function SectionHeader({
       <h2 className="font-sans text-[18px] font-bold tracking-tight text-ink">{title}</h2>
       <Link href={href} className="inline-flex items-center gap-1.5 text-sm font-semibold text-olive">
         {linkLabel}
-        <ChevronRightIcon size={14} />
+        <Icon name="chevronRight" size={14} />
       </Link>
     </div>
   )
