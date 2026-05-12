@@ -1195,7 +1195,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               )
             })()}
             <div className="mt-3 flex">
-              <AddToCalendarButton eventId={event.id} variant="onOlive" />
+              <AddToCalendarButton
+                eventId={event.id}
+                variant="onOlive"
+                event={{ ...event, confirmed_date: event.confirmed_date }}
+              />
             </div>
           </div>
         </Card>
