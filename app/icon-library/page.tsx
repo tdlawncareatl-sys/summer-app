@@ -28,11 +28,20 @@ const SECTIONS: { title: string; names: IconName[] }[] = [
     names: ['sun', 'bell', 'star', 'clock', 'mapPin', 'info', 'note'],
   },
   {
-    title: 'Activities',
-    names: [
-      'palm', 'clapper', 'mountain', 'tent', 'boat', 'paddle',
-      'game', 'flag', 'pizza', 'boot', 'droplet', 'picnic', 'bowl',
-    ],
+    title: 'Outdoors',
+    names: ['palm', 'mountain', 'tent', 'fire', 'fish', 'boot', 'picnic', 'droplet', 'boat', 'swim'],
+  },
+  {
+    title: 'Sports & games',
+    names: ['paddle', 'flag', 'bike', 'bowling', 'cards', 'game'],
+  },
+  {
+    title: 'Food & drink',
+    names: ['coffee', 'beer', 'wine', 'cocktail', 'pizza', 'bowl', 'cake'],
+  },
+  {
+    title: 'Music & travel',
+    names: ['clapper', 'music', 'mic', 'plane', 'car'],
   },
 ]
 

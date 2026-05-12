@@ -12,10 +12,18 @@ import {
   User, Users, Star, Check, X,
   Clock, MapPin, Info, PencilSimple, DotsThree,
   ShareNetwork, Copy, Note,
-  // activities
+  // outdoor activities
   TreePalm, FilmSlate, Mountains, Footprints,
   PingPong, GameController, Flag,
   Pizza, Tent, Drop, PicnicTable, BowlFood,
+  // food & drink
+  Coffee, BeerStein, Wine, Martini, Cake,
+  // entertainment
+  MusicNotes, MicrophoneStage,
+  // outdoor + indoor games
+  Campfire, BowlingBall, Fish, Bicycle, SwimmingPool, Cards,
+  // travel
+  Airplane, Car,
 } from '@phosphor-icons/react'
 import { PlankSinatra } from '@/app/components/customIcons'
 
@@ -59,6 +67,25 @@ export const icons = {
   droplet: Drop,
   picnic: PicnicTable,
   bowl: BowlFood,
+  // food & drink
+  coffee: Coffee,
+  beer: BeerStein,
+  wine: Wine,
+  cocktail: Martini,
+  cake: Cake,
+  // entertainment
+  music: MusicNotes,
+  mic: MicrophoneStage,
+  // outdoor + games
+  fire: Campfire,
+  bowling: BowlingBall,
+  fish: Fish,
+  bike: Bicycle,
+  swim: SwimmingPool,
+  cards: Cards,
+  // travel
+  plane: Airplane,
+  car: Car,
 } as const
 
 export type IconName = keyof typeof icons
