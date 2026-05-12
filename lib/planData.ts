@@ -17,6 +17,10 @@ export type RawEvent = {
   created_at: string
   confirmed_date?: string | null
   confirmed_end_date?: string | null
+  location_name?: string | null
+  location_address?: string | null
+  start_time?: string | null
+  end_time?: string | null
 }
 
 export type RawDateOption = {
@@ -80,7 +84,7 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
     { data: ideas },
   ] = await Promise.all([
     supabase.from('users').select('id, name'),
-    supabase.from('events').select('id, title, description, status, created_by, created_at, confirmed_date, confirmed_end_date').order('created_at', { ascending: false }),
+    supabase.from('events').select('id, title, description, status, created_by, created_at, confirmed_date, confirmed_end_date, location_name, location_address, start_time, end_time').order('created_at', { ascending: false }),
     supabase.from('date_options').select('id, event_id, date, end_date'),
     supabase.from('votes').select('id, date_option_id, response, preferred, user_id'),
     supabase.from('availability').select('user_id, date, category'),
