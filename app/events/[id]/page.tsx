@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, use, type ReactNode } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ensureUser } from '@/lib/ensureUser'
 import { useName } from '@/lib/useName'
@@ -135,6 +136,7 @@ function densityClasses(density: ReturnType<typeof densityForDay>): string {
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [name] = useName()
   const [event, setEvent] = useState<EventRow | null>(null)
   const [loadingEvent, setLoadingEvent] = useState(true)
@@ -149,6 +151,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [addingDate, setAddingDate] = useState(false)
   const [savingDetails, setSavingDetails] = useState(false)
   const [savingLength, setSavingLength] = useState(false)
+  const [deletingEvent, setDeletingEvent] = useState(false)
 
   const [editingDetails, setEditingDetails] = useState(false)
   const [editingLength, setEditingLength] = useState(false)
@@ -797,6 +800,32 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     } catch {
       setDetailError('Could not copy the location from this browser.')
     }
+  }
+
+  async function deleteEvent() {
+    if (!event || !isCreator || deletingEvent) return
+    if (typeof window !== 'undefined') {
+      const shouldDelete = window.confirm(
+        `Delete ${event.title}? This will remove its proposed dates, votes, and related updates.`,
+      )
+      if (!shouldDelete) return
+    }
+
+    setDeletingEvent(true)
+    setDetailMessage(null)
+    setDetailError(null)
+    setShowOptions(false)
+
+    const { error } = await supabase.from('events').delete().eq('id', event.id)
+
+    if (error) {
+      setDetailError(error.message)
+      setDeletingEvent(false)
+      return
+    }
+
+    router.replace('/events')
+    router.refresh()
   }
 
   // ─────────── calendar interactions ───────────
@@ -1639,6 +1668,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 onClick={startEditingDetails}
               />
             ) : null}
+            {isCreator ? (
+              <SheetAction
+                icon={<Icon name="x" size={14} />}
+                title={deletingEvent ? 'Deleting event…' : 'Delete event'}
+                description="Remove this event and its vote history."
+                onClick={() => void deleteEvent()}
+                tone="danger"
+                disabled={deletingEvent}
+              />
+            ) : null}
           </div>
         </Sheet>
       ) : null}
@@ -1888,19 +1927,31 @@ function SheetAction({
   title,
   description,
   onClick,
+  tone = 'default',
+  disabled = false,
 }: {
   icon: ReactNode
   title: string
   description: string
   onClick: () => void
+  tone?: 'default' | 'danger'
+  disabled?: boolean
 }) {
+  const containerClasses = tone === 'danger'
+    ? 'bg-blush-tint hover:bg-blush-soft'
+    : 'bg-sand hover:bg-sand-alt'
+  const iconClasses = tone === 'danger'
+    ? 'bg-blush-soft text-blush'
+    : 'bg-olive-tint text-olive'
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-start gap-3 rounded-[16px] bg-sand px-4 py-3 text-left transition-colors hover:bg-sand-alt"
+      disabled={disabled}
+      className={`flex items-start gap-3 rounded-[16px] px-4 py-3 text-left transition-colors disabled:opacity-60 ${containerClasses}`}
     >
-      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-olive-tint text-olive">
+      <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconClasses}`}>
         {icon}
       </span>
       <span>
