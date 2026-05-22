@@ -54,6 +54,7 @@ import Card from '@/app/components/Card'
 import StatusChip from '@/app/components/StatusChip'
 import IconTile from '@/app/components/IconTile'
 import Avatar from '@/app/components/Avatar'
+import AttendanceCard from '@/app/components/AttendanceCard'
 import EventLocationFields from '@/app/components/EventLocationFields'
 import Icon from '@/app/components/Icon'
 import AddToCalendarButton from '@/app/components/AddToCalendarButton'
@@ -684,10 +685,31 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       confirmation_method: isManual ? 'manual' : 'auto',
       confirmed_by: name ?? event.created_by ?? null,
     })
+    // Silent seed: votes on the winning option become attendance. Only fills
+    // gaps — never overwrites an existing attendance row, so re-confirming
+    // an event preserves anyone's explicit choice.
+    await seedAttendanceFromVotes(event.id, winner)
     setDetailMessage('Event confirmed.')
     setConfirming(false)
     await loadAll({ blocking: false })
     await refreshEventNotifications(actorUserId, true)
+  }
+
+  async function seedAttendanceFromVotes(eventId: string, winner: DateOption) {
+    const seed = winner.votes
+      .filter((vote) => vote.response === 'works' || vote.response === 'pass')
+      .map((vote) => ({
+        event_id: eventId,
+        user_id: vote.user_id,
+        status: vote.response === 'works' ? 'going' : 'not_going',
+        updated_at: new Date().toISOString(),
+      }))
+    if (seed.length === 0) return
+    // ignoreDuplicates so manual choices win over the seed
+    const { error } = await supabase
+      .from('attendance')
+      .upsert(seed, { onConflict: 'event_id,user_id', ignoreDuplicates: true })
+    if (error) console.error('seed attendance:', error)
   }
 
   async function unconfirmEvent() {
@@ -1232,6 +1254,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
           </div>
         </Card>
+      ) : null}
+
+      {isConfirmed ? (
+        <AttendanceCard
+          eventId={event.id}
+          participants={participants}
+          currentUserName={name}
+        />
       ) : null}
 
       {/* Top-of-page shortcut — locks in the system-recommended date. Per-option

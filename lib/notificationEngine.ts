@@ -216,7 +216,7 @@ export function buildEventNotificationPlans(input: {
           eventId: event.id,
           type: 'event_confirmed',
           tone: 'olive',
-          title: `${event.title} is set`,
+          title: `${event.title} is set — are you in?`,
           body: event.location_name?.trim()
             ? `${formatDateRangeShort(event.confirmed_date, event.confirmed_end_date)} · ${event.location_name.trim()}`
             : formatDateRangeShort(event.confirmed_date, event.confirmed_end_date),

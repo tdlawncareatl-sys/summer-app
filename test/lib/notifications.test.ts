@@ -95,7 +95,7 @@ describe('buildEventNotificationPlans', () => {
     expect(plans.filter((plan) => plan.type === 'event_confirmed')).toHaveLength(3)
     expect(plans.filter((plan) => plan.type === 'event_reminder')).toHaveLength(6)
     expect(plans.filter((plan) => plan.type === 'event_confirmed')[0]).toMatchObject({
-      title: 'Lake Weekend is set',
+      title: 'Lake Weekend is set — are you in?',
     })
     expect(plans[0]?.body).toContain('Lake House')
   })
