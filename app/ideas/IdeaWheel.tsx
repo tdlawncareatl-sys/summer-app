@@ -44,8 +44,10 @@ export default function IdeaWheel({
   const rafRef = useRef<number | null>(null)
 
   // Recompute transforms for every visible slot based on its distance from
-  // the active center. Runs on scroll (rAF-throttled) and is the heart of
-  // the wheel illusion.
+  // the active center. Runs on scroll (rAF-throttled) and drives the wheel
+  // illusion. Transforms are applied directly to DOM (no React) and slots
+  // have NO CSS transition on transform — scroll position is the source of
+  // truth, easing would just fight it and create the shake.
   const updateSlots = useCallback(() => {
     rafRef.current = null
     const wheel = wheelRef.current
@@ -61,15 +63,17 @@ export default function IdeaWheel({
       const delta = (slotCenter - wheelCenter) / SLOT_HEIGHT
       const absDelta = Math.abs(delta)
 
-      // Cap visual distortion at +/- 3 slots so far-off cards don't get
-      // wildly small. Beyond that they're effectively hidden anyway.
+      // Cap distortion at +/- 3 slots. Gentler tilt (was 18deg) so snap
+      // settling doesn't read as a visible "kick".
       const clamped = Math.max(-3, Math.min(3, delta))
-      const scale = Math.max(0.62, 1 - Math.abs(clamped) * 0.13)
-      const opacity = Math.max(0.18, 1 - Math.abs(clamped) * 0.32)
-      const rotateX = clamped * 18 // degrees — tilts cards toward the wheel axis
-      const translateZ = -Math.abs(clamped) * 32
+      const scale = Math.max(0.66, 1 - Math.abs(clamped) * 0.11)
+      const opacity = Math.max(0.22, 1 - Math.abs(clamped) * 0.28)
+      const rotateX = clamped * 12
+      const translateZ = -Math.abs(clamped) * 22
 
-      slot.style.transform = `translateZ(${translateZ}px) rotateX(${rotateX}deg) scale(${scale})`
+      // translate3d puts each slot on its own GPU layer; the trailing
+      // rotateX/scale compose on top without re-layout per frame.
+      slot.style.transform = `translate3d(0, 0, 0) rotateX(${rotateX}deg) translateZ(${translateZ}px) scale(${scale})`
       slot.style.opacity = String(opacity)
       slot.style.zIndex = String(100 - Math.round(absDelta * 10))
 
@@ -79,7 +83,11 @@ export default function IdeaWheel({
       }
     })
 
-    setActiveIndex((prev) => (prev === nearest ? prev : nearest))
+    // Hysteresis: only flip active when the new card is meaningfully close
+    // to center. Stops border/state from oscillating during snap settle.
+    if (nearestDist < 0.4) {
+      setActiveIndex((prev) => (prev === nearest ? prev : nearest))
+    }
   }, [])
 
   function handleScroll() {
@@ -179,10 +187,11 @@ export default function IdeaWheel({
               ref={(el) => {
                 slotRefs.current[index] = el
               }}
-              className="snap-center transition-transform will-change-transform"
+              className="snap-center will-change-transform"
               style={{
                 height: `${SLOT_HEIGHT}px`,
                 transformOrigin: 'center center',
+                backfaceVisibility: 'hidden',
               }}
             >
               <WheelCard idea={idea} active={index === activeIndex} />
@@ -307,7 +316,10 @@ function WheelCard({
   return (
     <div
       className={[
-        'mx-2 flex h-full items-center gap-3 rounded-[18px] border bg-cream px-4 shadow-[var(--shadow-soft)] transition-all',
+        'mx-2 flex h-full items-center gap-3 rounded-[18px] border bg-cream px-4 shadow-[var(--shadow-soft)]',
+        // Only transition the border color — never the box itself, because
+        // its position is being driven by the parent slot's transform.
+        'transition-colors duration-150',
         active ? 'border-olive/40' : 'border-stone/60',
       ].join(' ')}
     >
