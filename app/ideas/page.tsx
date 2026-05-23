@@ -2,24 +2,28 @@
 
 // Ideas as a database, not a vote. Two browsing modes:
 //   - Grid: 2-col scannable cards, tap to expand inline for description + Plan
-//   - Wheel: spin-and-browse carousel (Phase 3 — placeholder for now)
-// Promoting an idea creates an event but leaves the idea in place; the
-// "Trending" indicator is just the top-of-sort card when it has real traction.
+//   - Wheel: spin-and-browse vertical carousel (Phase 3)
+//
+// Per-user interest lives in the `idea_likes` table; a Postgres trigger keeps
+// `ideas.likes` as a denormalized count. Tap "Open" on an expanded card to
+// land on /ideas/[id] for the full detail (description + interested avatars).
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
+import { ensureUser } from '@/lib/ensureUser'
 import { categoryFor } from '@/lib/categories'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import IconTile from '../components/IconTile'
 import StatusChip from '../components/StatusChip'
 import Icon from '../components/Icon'
+import IdeaWheel from './IdeaWheel'
 
-type Idea = {
+export type Idea = {
   id: string
   title: string
   description: string | null
@@ -28,7 +32,7 @@ type Idea = {
   created_at?: string
 }
 
-type EventLite = {
+export type EventLite = {
   id: string
   title: string
   status: string
@@ -37,13 +41,7 @@ type EventLite = {
 type SortMode = 'momentum' | 'recent'
 type ViewMode = 'grid' | 'wheel'
 
-// Threshold for the "Trending" badge — avoids declaring a trend on a single
-// like from the first person to see an idea.
 const TRENDING_MIN_LIKES = 3
-
-function likedKeyFor(key: string) {
-  return `summer-likes-${key}`
-}
 
 export default function IdeasPage() {
   const router = useRouter()
@@ -63,6 +61,7 @@ export default function IdeasPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const formRef = useRef<HTMLDivElement | null>(null)
 
@@ -70,11 +69,34 @@ export default function IdeasPage() {
     void loadIdeasSurface()
   }, [])
 
+  // Resolve current user → user_id → personal likes. Falls back gracefully
+  // if the lookup fails (e.g., not signed in yet).
   useEffect(() => {
-    const storageKey = authUser?.email ?? name
-    if (!storageKey) return
-    const liked = localStorage.getItem(likedKeyFor(storageKey))
-    setLikedIds(liked ? new Set(JSON.parse(liked)) : new Set())
+    let alive = true
+    async function loadMyLikes() {
+      if (!authUser?.email && !name) {
+        setCurrentUserId(null)
+        setLikedIds(new Set())
+        return
+      }
+      try {
+        const id = await ensureUser(name ?? authUser?.email ?? '')
+        if (!alive) return
+        setCurrentUserId(id)
+        const { data } = await supabase
+          .from('idea_likes')
+          .select('idea_id')
+          .eq('user_id', id)
+        if (!alive) return
+        setLikedIds(new Set((data ?? []).map((row) => row.idea_id as string)))
+      } catch {
+        // not authed yet — fine
+      }
+    }
+    void loadMyLikes()
+    return () => {
+      alive = false
+    }
   }, [authUser?.email, name])
 
   async function loadIdeasSurface() {
@@ -128,26 +150,53 @@ export default function IdeasPage() {
     if (!name || likingId === idea.id) return
     setLikingId(idea.id)
 
-    const storageKey = authUser?.email ?? name
+    let userId = currentUserId
+    if (!userId) {
+      try {
+        userId = await ensureUser(name)
+        setCurrentUserId(userId)
+      } catch (err) {
+        console.error('ensureUser for interest:', err)
+        setLikingId(null)
+        return
+      }
+    }
+
     const alreadyLiked = likedIds.has(idea.id)
     const nextLikedIds = new Set(likedIds)
     if (alreadyLiked) nextLikedIds.delete(idea.id)
     else nextLikedIds.add(idea.id)
-    const nextLikes = Math.max(0, alreadyLiked ? idea.likes - 1 : idea.likes + 1)
+    const optimisticLikes = Math.max(0, alreadyLiked ? idea.likes - 1 : idea.likes + 1)
 
     setLikedIds(nextLikedIds)
-    localStorage.setItem(likedKeyFor(storageKey), JSON.stringify([...nextLikedIds]))
     setIdeas((current) => current.map((row) => (
-      row.id === idea.id ? { ...row, likes: nextLikes } : row
+      row.id === idea.id ? { ...row, likes: optimisticLikes } : row
     )))
 
-    const { error } = await supabase.from('ideas').update({ likes: nextLikes }).eq('id', idea.id)
+    const op = alreadyLiked
+      ? supabase.from('idea_likes').delete().eq('idea_id', idea.id).eq('user_id', userId)
+      : supabase.from('idea_likes').insert({ idea_id: idea.id, user_id: userId })
+
+    const { error } = await op
     if (error) {
       setLikedIds(likedIds)
-      localStorage.setItem(likedKeyFor(storageKey), JSON.stringify([...likedIds]))
       setIdeas((current) => current.map((row) => (
         row.id === idea.id ? { ...row, likes: idea.likes } : row
       )))
+      console.error('toggle interest:', error)
+    } else {
+      // Re-read the trigger-updated aggregate so our local count is honest
+      // even if other people are toggling at the same time.
+      const { data: refreshed } = await supabase
+        .from('ideas')
+        .select('likes')
+        .eq('id', idea.id)
+        .single()
+      if (refreshed) {
+        setIdeas((current) => current.map((row) => (
+          row.id === idea.id ? { ...row, likes: refreshed.likes ?? optimisticLikes } : row
+        )))
+      }
     }
 
     setLikingId(null)
@@ -193,16 +242,15 @@ export default function IdeasPage() {
     router.push(`/events/${data.id}`)
   }
 
-  const sortedIdeas = [...ideas].sort((a, b) => {
-    if (sortMode === 'momentum') {
-      if (b.likes !== a.likes) return b.likes - a.likes
-    }
-    return (b.created_at ?? '').localeCompare(a.created_at ?? '')
-  })
+  const sortedIdeas = useMemo(() => {
+    return [...ideas].sort((a, b) => {
+      if (sortMode === 'momentum') {
+        if (b.likes !== a.likes) return b.likes - a.likes
+      }
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+    })
+  }, [ideas, sortMode])
 
-  // Trending = the top card under the current sort, but only if it has enough
-  // interest to be a real signal. Sort-aware so toggling to "Newest" doesn't
-  // confusingly demote the trending idea.
   const trendingId =
     sortMode === 'momentum' && sortedIdeas[0] && sortedIdeas[0].likes >= TRENDING_MIN_LIKES
       ? sortedIdeas[0].id
@@ -353,7 +401,15 @@ export default function IdeasPage() {
               })}
             </div>
           ) : (
-            <WheelPlaceholder />
+            <IdeaWheel
+              ideas={sortedIdeas}
+              likedIds={likedIds}
+              events={events}
+              likingId={likingId}
+              planningId={planningId}
+              onToggleInterest={(idea) => void toggleInterest(idea)}
+              onPlan={(idea) => void planIdea(idea)}
+            />
           )}
         </>
       )}
@@ -560,7 +616,7 @@ function ExpandedIdeaCard({
           </div>
 
           {idea.description ? (
-            <p className="mt-2 text-sm leading-6 text-ink-soft">{idea.description}</p>
+            <p className="mt-2 text-sm leading-6 text-ink-soft line-clamp-4">{idea.description}</p>
           ) : (
             <p className="mt-2 text-sm italic text-ink-mute">No description yet.</p>
           )}
@@ -580,6 +636,13 @@ function ExpandedIdeaCard({
               {liked ? 'Interested' : 'Interested?'}
               <span className={liked ? 'text-white/80' : 'text-ink-mute'}>· {idea.likes}</span>
             </button>
+            <Link
+              href={`/ideas/${idea.id}`}
+              className="inline-flex items-center gap-1.5 rounded-[14px] bg-sand px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-sand-alt"
+            >
+              Open
+              <Icon name="chevronRight" size={13} />
+            </Link>
             {plannedEvent ? (
               <Link
                 href={`/events/${plannedEvent.id}`}
@@ -605,20 +668,6 @@ function ExpandedIdeaCard({
   )
 }
 
-function WheelPlaceholder() {
-  return (
-    <Card className="my-6 py-10 text-center">
-      <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-olive-tint text-olive">
-        <Icon name="lightbulb" size={22} />
-      </div>
-      <p className="mt-3 text-base font-bold text-ink">Wheel view is on the way</p>
-      <p className="mx-auto mt-1 max-w-[240px] text-sm text-ink-soft">
-        Spin-and-browse mode for picking what to do. Switch back to Grid for now.
-      </p>
-    </Card>
-  )
-}
-
 function normalizeTitle(title: string) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
@@ -627,6 +676,6 @@ function titlesMatch(a: string, b: string) {
   return normalizeTitle(a) === normalizeTitle(b)
 }
 
-function findMatchingEvent(title: string, events: EventLite[]) {
+export function findMatchingEvent(title: string, events: EventLite[]) {
   return events.find((event) => titlesMatch(title, event.title))
 }
