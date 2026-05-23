@@ -1,9 +1,10 @@
 'use client'
 
-// Ideas as a database, not a vote. One list, one upvote per person, sort by
-// interest or recency. Promoting an idea creates an event but leaves the idea
-// in place — nothing ever archives. The "Plan" badge is just a derived view
-// of whether a matching event exists.
+// Ideas as a database, not a vote. Two browsing modes:
+//   - Grid: 2-col scannable cards, tap to expand inline for description + Plan
+//   - Wheel: spin-and-browse carousel (Phase 3 — placeholder for now)
+// Promoting an idea creates an event but leaves the idea in place; the
+// "Trending" indicator is just the top-of-sort card when it has real traction.
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
@@ -34,6 +35,11 @@ type EventLite = {
 }
 
 type SortMode = 'momentum' | 'recent'
+type ViewMode = 'grid' | 'wheel'
+
+// Threshold for the "Trending" badge — avoids declaring a trend on a single
+// like from the first person to see an idea.
+const TRENDING_MIN_LIKES = 3
 
 function likedKeyFor(key: string) {
   return `summer-likes-${key}`
@@ -54,6 +60,8 @@ export default function IdeasPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('momentum')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
 
   const formRef = useRef<HTMLDivElement | null>(null)
@@ -135,7 +143,6 @@ export default function IdeasPage() {
 
     const { error } = await supabase.from('ideas').update({ likes: nextLikes }).eq('id', idea.id)
     if (error) {
-      // Rollback on failure so the local count doesn't drift from the DB.
       setLikedIds(likedIds)
       localStorage.setItem(likedKeyFor(storageKey), JSON.stringify([...likedIds]))
       setIdeas((current) => current.map((row) => (
@@ -151,6 +158,7 @@ export default function IdeasPage() {
     setDeletingId(idea.id)
     await supabase.from('ideas').delete().eq('id', idea.id)
     setIdeas((current) => current.filter((row) => row.id !== idea.id))
+    setExpandedId((current) => (current === idea.id ? null : current))
     setDeletingId(null)
   }
 
@@ -191,6 +199,18 @@ export default function IdeasPage() {
     }
     return (b.created_at ?? '').localeCompare(a.created_at ?? '')
   })
+
+  // Trending = the top card under the current sort, but only if it has enough
+  // interest to be a real signal. Sort-aware so toggling to "Newest" doesn't
+  // confusingly demote the trending idea.
+  const trendingId =
+    sortMode === 'momentum' && sortedIdeas[0] && sortedIdeas[0].likes >= TRENDING_MIN_LIKES
+      ? sortedIdeas[0].id
+      : null
+
+  function toggleExpanded(id: string) {
+    setExpandedId((current) => (current === id ? null : id))
+  }
 
   return (
     <main className="max-w-md mx-auto px-5">
@@ -265,6 +285,10 @@ export default function IdeasPage() {
         </div>
       )}
 
+      {!loading && sortedIdeas.length > 0 ? (
+        <ViewToggle value={viewMode} onChange={setViewMode} />
+      ) : null}
+
       {loading ? (
         <IdeasSkeleton />
       ) : sortedIdeas.length === 0 ? (
@@ -274,7 +298,7 @@ export default function IdeasPage() {
         </Card>
       ) : (
         <>
-          <div className="mt-6 mb-3 flex items-baseline justify-between gap-3">
+          <div className="mt-4 mb-3 flex items-baseline justify-between gap-3">
             <p className="text-xs font-semibold text-ink-soft">
               {sortedIdeas.length} idea{sortedIdeas.length === 1 ? '' : 's'} in the bank
             </p>
@@ -294,40 +318,170 @@ export default function IdeasPage() {
             </label>
           </div>
 
-          <div className="flex flex-col gap-3 pb-4">
-            {sortedIdeas.map((idea) => (
-              <IdeaRow
-                key={idea.id}
-                idea={idea}
-                liked={likedIds.has(idea.id)}
-                liking={likingId === idea.id}
-                planning={planningId === idea.id}
-                deleting={deletingId === idea.id}
-                isOwner={name === idea.submitted_by}
-                plannedEvent={findMatchingEvent(idea.title, events) ?? null}
-                onToggleInterest={() => void toggleInterest(idea)}
-                onPlan={() => void planIdea(idea)}
-                onDelete={() => void deleteIdea(idea)}
-              />
-            ))}
-          </div>
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-2 gap-3 pb-4">
+              {sortedIdeas.map((idea) => {
+                const expanded = expandedId === idea.id
+                const plannedEvent = findMatchingEvent(idea.title, events) ?? null
+                return expanded ? (
+                  <ExpandedIdeaCard
+                    key={idea.id}
+                    idea={idea}
+                    liked={likedIds.has(idea.id)}
+                    liking={likingId === idea.id}
+                    planning={planningId === idea.id}
+                    deleting={deletingId === idea.id}
+                    isOwner={name === idea.submitted_by}
+                    plannedEvent={plannedEvent}
+                    trending={trendingId === idea.id}
+                    onCollapse={() => toggleExpanded(idea.id)}
+                    onToggleInterest={() => void toggleInterest(idea)}
+                    onPlan={() => void planIdea(idea)}
+                    onDelete={() => void deleteIdea(idea)}
+                  />
+                ) : (
+                  <GridIdeaCard
+                    key={idea.id}
+                    idea={idea}
+                    liked={likedIds.has(idea.id)}
+                    liking={likingId === idea.id}
+                    trending={trendingId === idea.id}
+                    onTap={() => toggleExpanded(idea.id)}
+                    onToggleInterest={() => void toggleInterest(idea)}
+                  />
+                )
+              })}
+            </div>
+          ) : (
+            <WheelPlaceholder />
+          )}
         </>
       )}
     </main>
   )
 }
 
-function IdeasSkeleton() {
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: ViewMode
+  onChange: (next: ViewMode) => void
+}) {
   return (
-    <div className="mt-6 animate-pulse">
-      <div className="h-32 rounded-[var(--radius-lg)] bg-cream" />
-      <div className="mt-3 h-32 rounded-[var(--radius-lg)] bg-cream" />
-      <div className="mt-3 h-32 rounded-[var(--radius-lg)] bg-cream" />
+    <div
+      role="tablist"
+      aria-label="Ideas view"
+      className="mt-5 inline-flex w-full max-w-[220px] items-center rounded-[14px] bg-sand p-1"
+    >
+      <ToggleButton label="Grid" active={value === 'grid'} onClick={() => onChange('grid')} />
+      <ToggleButton label="Wheel" active={value === 'wheel'} onClick={() => onChange('wheel')} />
     </div>
   )
 }
 
-function IdeaRow({
+function ToggleButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={[
+        'flex-1 rounded-[10px] px-3 py-1.5 text-sm font-semibold transition-all',
+        active ? 'bg-cream text-ink shadow-[var(--shadow-soft)]' : 'text-ink-soft hover:text-ink',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  )
+}
+
+function IdeasSkeleton() {
+  return (
+    <div className="mt-6 grid grid-cols-2 gap-3 animate-pulse">
+      <div className="h-36 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="h-36 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="h-36 rounded-[var(--radius-lg)] bg-cream" />
+      <div className="h-36 rounded-[var(--radius-lg)] bg-cream" />
+    </div>
+  )
+}
+
+function GridIdeaCard({
+  idea,
+  liked,
+  liking,
+  trending,
+  onTap,
+  onToggleInterest,
+}: {
+  idea: Idea
+  liked: boolean
+  liking: boolean
+  trending: boolean
+  onTap: () => void
+  onToggleInterest: () => void
+}) {
+  const category = categoryFor(idea.title)
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      className={[
+        'group relative flex h-full flex-col items-start gap-2.5 rounded-[var(--radius-lg)] border bg-cream p-3.5 text-left shadow-[var(--shadow-soft)] transition-all active:scale-[0.98]',
+        trending ? 'border-olive bg-olive-tint' : 'border-stone/60',
+      ].join(' ')}
+    >
+      {trending ? (
+        <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-olive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+          Trending
+        </span>
+      ) : null}
+      <IconTile name={category.iconName} tint={category.tint} size={48} rounded="full" iconSize={22} />
+      <h3 className="text-[15px] font-bold leading-tight text-ink line-clamp-2">{idea.title}</h3>
+      {idea.submitted_by ? (
+        <p className="text-[11px] text-ink-mute">by {idea.submitted_by}</p>
+      ) : null}
+      <div className="mt-auto pt-2">
+        <span
+          role="button"
+          tabIndex={0}
+          aria-pressed={liked}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!liking) onToggleInterest()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (!liking) onToggleInterest()
+            }
+          }}
+          className={[
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors',
+            liking ? 'opacity-50' : '',
+            liked ? 'bg-olive text-white' : 'bg-sand text-ink-soft hover:bg-sand-alt',
+          ].join(' ')}
+        >
+          <Icon name={liked ? 'check' : 'plus'} size={11} />
+          {idea.likes}
+        </span>
+      </div>
+    </button>
+  )
+}
+
+function ExpandedIdeaCard({
   idea,
   liked,
   liking,
@@ -335,6 +489,8 @@ function IdeaRow({
   deleting,
   isOwner,
   plannedEvent,
+  trending,
+  onCollapse,
   onToggleInterest,
   onPlan,
   onDelete,
@@ -346,20 +502,33 @@ function IdeaRow({
   deleting: boolean
   isOwner: boolean
   plannedEvent: EventLite | null
+  trending: boolean
+  onCollapse: () => void
   onToggleInterest: () => void
   onPlan: () => void
   onDelete: () => void
 }) {
   const category = categoryFor(idea.title)
-
   return (
-    <Card className="p-3.5">
+    <Card
+      className={[
+        'col-span-2 p-4 transition-all',
+        trending ? 'ring-1 ring-olive' : '',
+      ].join(' ')}
+    >
       <div className="flex items-start gap-3">
         <IconTile name={category.iconName} tint={category.tint} size={64} rounded="full" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="text-[18px] font-bold leading-tight text-ink">{idea.title}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-[18px] font-bold leading-tight text-ink">{idea.title}</h3>
+                {trending ? (
+                  <span className="inline-flex items-center rounded-full bg-olive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                    Trending
+                  </span>
+                ) : null}
+              </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-ink-soft">
                 {idea.submitted_by ? <span>by {idea.submitted_by}</span> : null}
                 {plannedEvent ? (
@@ -367,24 +536,38 @@ function IdeaRow({
                 ) : null}
               </div>
             </div>
-            {isOwner ? (
-              <button type="button"
-                onClick={onDelete}
-                disabled={deleting}
-                className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
-                aria-label="Delete idea"
+            <div className="flex shrink-0 items-center gap-1">
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={deleting}
+                  className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-blush disabled:opacity-40"
+                  aria-label="Delete idea"
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="rounded-[12px] p-1 text-ink-faint transition-colors hover:text-ink-soft"
+                aria-label="Collapse idea"
               >
-                <Icon name="x" size={14} />
+                <Icon name="chevronDown" size={14} className="rotate-180" />
               </button>
-            ) : null}
+            </div>
           </div>
 
           {idea.description ? (
-            <p className="mt-2 text-sm leading-6 text-ink-soft line-clamp-3">{idea.description}</p>
-          ) : null}
+            <p className="mt-2 text-sm leading-6 text-ink-soft">{idea.description}</p>
+          ) : (
+            <p className="mt-2 text-sm italic text-ink-mute">No description yet.</p>
+          )}
 
-          <div className="mt-3 flex items-center gap-2">
-            <button type="button"
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
               onClick={onToggleInterest}
               disabled={liking}
               aria-pressed={liked}
@@ -406,7 +589,8 @@ function IdeaRow({
                 <Icon name="chevronRight" size={13} />
               </Link>
             ) : (
-              <button type="button"
+              <button
+                type="button"
                 onClick={onPlan}
                 disabled={planning}
                 className="ml-auto inline-flex items-center gap-2 rounded-[14px] bg-olive px-3.5 py-2 text-sm font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
@@ -417,6 +601,20 @@ function IdeaRow({
           </div>
         </div>
       </div>
+    </Card>
+  )
+}
+
+function WheelPlaceholder() {
+  return (
+    <Card className="my-6 py-10 text-center">
+      <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-olive-tint text-olive">
+        <Icon name="lightbulb" size={22} />
+      </div>
+      <p className="mt-3 text-base font-bold text-ink">Wheel view is on the way</p>
+      <p className="mx-auto mt-1 max-w-[240px] text-sm text-ink-soft">
+        Spin-and-browse mode for picking what to do. Switch back to Grid for now.
+      </p>
     </Card>
   )
 }
