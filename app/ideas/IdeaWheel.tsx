@@ -5,6 +5,11 @@
 // We layer per-card 3D transforms on top: cards above/below the active slot
 // tilt away and fade, so the strip reads as the edge of a rotating wheel.
 //
+// Infinite loop: we render the ideas list three times back-to-back and start
+// the user in the middle copy. When they scroll into the top or bottom copy
+// we silently shift scrollTop by one full list height, landing them on the
+// visually identical position in the middle copy. They never hit a wall.
+//
 // "Spin" picks a random idea and smooth-scrolls there. No casino — just a
 // momentary surprise pick, then the user lands on it and decides.
 
@@ -40,8 +45,18 @@ export default function IdeaWheel({
 }) {
   const wheelRef = useRef<HTMLDivElement | null>(null)
   const slotRefs = useRef<Array<HTMLDivElement | null>>([])
+  // activeIndex is into the LOOPED array (length = 3 * ideas.length). The
+  // real idea is `ideas[activeIndex % ideas.length]`.
   const [activeIndex, setActiveIndex] = useState(0)
   const rafRef = useRef<number | null>(null)
+
+  const N = ideas.length
+  // Three back-to-back copies of the source list. Stable keys per copy so
+  // React doesn't tear down DOM on re-render.
+  const loopedIdeas = N > 0 ? [...ideas, ...ideas, ...ideas] : []
+  // Set true while a programmatic smooth-scroll is animating, so the loop
+  // logic doesn't kick in mid-animation and break the snap target.
+  const suppressLoopRef = useRef(false)
 
   // Recompute transforms for every visible slot based on its distance from
   // the active center. Runs on scroll (rAF-throttled) and drives the wheel
@@ -88,7 +103,21 @@ export default function IdeaWheel({
     if (nearestDist < 0.4) {
       setActiveIndex((prev) => (prev === nearest ? prev : nearest))
     }
-  }, [])
+
+    // Infinite loop: if the user has drifted into the top copy (indices < N)
+    // or the bottom copy (indices >= 2N), silently shift scrollTop by the
+    // height of one full copy. Visual content is identical at the new
+    // position so the jump is invisible. Skip this when there's nothing to
+    // loop (N <= 1) or while a programmatic smooth-scroll is in flight.
+    if (N > 1 && !suppressLoopRef.current) {
+      const shift = N * SLOT_HEIGHT
+      if (nearest < N) {
+        wheel.scrollTop += shift
+      } else if (nearest >= 2 * N) {
+        wheel.scrollTop -= shift
+      }
+    }
+  }, [N])
 
   function handleScroll() {
     if (rafRef.current != null) return
@@ -117,27 +146,46 @@ export default function IdeaWheel({
     const wheel = wheelRef.current
     if (!slot || !wheel) return
     const target = slot.offsetTop + slot.clientHeight / 2 - wheel.clientHeight / 2
+    if (behavior === 'smooth') {
+      // Pause the loop-correction logic for ~the smooth-scroll duration so
+      // the browser can land on the exact target.
+      suppressLoopRef.current = true
+      window.setTimeout(() => {
+        suppressLoopRef.current = false
+      }, 600)
+    }
     wheel.scrollTo({ top: target, behavior })
   }
 
   function spin() {
     if (ideas.length <= 1) return
-    let next = activeIndex
+    const currentReal = activeIndex % N
+    let nextReal = currentReal
     // Don't land on the same idea twice in a row — keeps Spin honest.
-    while (next === activeIndex) {
-      next = Math.floor(Math.random() * ideas.length)
+    while (nextReal === currentReal) {
+      nextReal = Math.floor(Math.random() * N)
     }
-    scrollToIndex(next)
+    // Land within the middle copy so we have headroom on both sides.
+    scrollToIndex(N + nextReal)
   }
 
-  // Center the first card on mount so the initial layout is clean.
+  function stepRelative(delta: number) {
+    // We're always within copy 1 thanks to the loop. Stepping +/-1 just
+    // moves to the adjacent slot — wraparound is handled automatically by
+    // the boundary-jump in updateSlots when we approach the edges.
+    scrollToIndex(activeIndex + delta)
+  }
+
+  // Center on the first idea of the MIDDLE copy so there's a full copy of
+  // headroom in either direction before the loop has to fire.
   useEffect(() => {
     if (ideas.length > 0) {
-      requestAnimationFrame(() => scrollToIndex(0, 'auto'))
+      requestAnimationFrame(() => scrollToIndex(N, 'auto'))
     }
   }, [ideas.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const active = ideas[activeIndex]
+  const activeReal = N > 0 ? activeIndex % N : 0
+  const active = ideas[activeReal]
   const plannedEvent = active ? findMatchingEvent(active.title, events) ?? null : null
   const activeLiked = active ? likedIds.has(active.id) : false
 
@@ -181,9 +229,9 @@ export default function IdeaWheel({
             style={{ height: `${(WHEEL_HEIGHT - SLOT_HEIGHT) / 2}px` }}
           />
 
-          {ideas.map((idea, index) => (
+          {loopedIdeas.map((idea, index) => (
             <div
-              key={idea.id}
+              key={`${Math.floor(index / Math.max(1, N))}-${idea.id}`}
               ref={(el) => {
                 slotRefs.current[index] = el
               }}
@@ -205,22 +253,21 @@ export default function IdeaWheel({
           />
         </div>
 
-        {/* Up/down chevrons aligned with the active row */}
+        {/* Up/down chevrons aligned with the active row. No disabled state —
+            the wheel loops, so prev/next always work. */}
         <button
           type="button"
-          onClick={() => scrollToIndex(Math.max(0, activeIndex - 1))}
-          disabled={activeIndex === 0}
+          onClick={() => stepRelative(-1)}
           aria-label="Previous idea"
-          className="absolute left-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-cream p-1.5 text-ink-mute shadow-[var(--shadow-soft)] transition-opacity disabled:opacity-30"
+          className="absolute left-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-cream p-1.5 text-ink-mute shadow-[var(--shadow-soft)] transition-opacity"
         >
           <Icon name="chevronDown" size={16} className="rotate-180" />
         </button>
         <button
           type="button"
-          onClick={() => scrollToIndex(Math.min(ideas.length - 1, activeIndex + 1))}
-          disabled={activeIndex === ideas.length - 1}
+          onClick={() => stepRelative(1)}
           aria-label="Next idea"
-          className="absolute right-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-cream p-1.5 text-ink-mute shadow-[var(--shadow-soft)] transition-opacity disabled:opacity-30"
+          className="absolute right-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-cream p-1.5 text-ink-mute shadow-[var(--shadow-soft)] transition-opacity"
         >
           <Icon name="chevronDown" size={16} />
         </button>
@@ -228,7 +275,7 @@ export default function IdeaWheel({
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-mute">
-          {ideas.length > 0 ? `${activeIndex + 1} / ${ideas.length}` : '—'}
+          {N > 0 ? `${activeReal + 1} / ${N}` : '—'}
         </p>
         <button
           type="button"
