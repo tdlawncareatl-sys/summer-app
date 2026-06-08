@@ -22,18 +22,35 @@ Every decision should reduce friction, not add process. Simple and working beats
 
 ## Database tables
 
-`users`, `availability`, `events`, `date_options`, `votes`, `ideas`
+Formal events: `users`, `availability`, `events`, `date_options`, `votes`, `ideas`,
+`attendance`, plus notification tables (`notification_preferences`, `push_subscriptions`,
+`notifications`).
 
-## Voting logic
+This Week (casual): `weekly_plans`, `weekly_plan_votes`, `weekly_plan_ideas`.
 
-| Response | Points |
-|----------|--------|
-| Best     | 3 pts  |
-| Works    | 1 pt   |
-| No       | 0 pts  |
+## Voting logic — formal events (voting v2)
 
-Best is **exclusive** — picking Best on a new option auto-demotes your previous Best to Works.
-Conflict score per date option: `totalPoints − (blockedCount × 2)`.
+Each person marks each proposed date **Works** or **Pass**. On a Works vote they may also
+**star** it as their Best (one star per event — starring a new date moves the star). Short
+events can add an optional time-of-day preference.
+
+Ranking a date option: **most Works wins**, ties broken by **most Best stars**, then earlier
+date. "Blocked" (from the availability calendar) is shown as info only — it does **not** change
+the ranking. (The old Best=3/Works=1/No=0 points model is gone; see the `20260508_voting_v2`
+migration.)
+
+An event reads as **Voting** as soon as it has date options (even with zero votes), so the
+events that need a *first* vote are surfaced, not hidden. Logic lives in `lib/status.ts`
+(`inferEventStatus`) and per-user `needsMyVote` is derived in `lib/planData.ts`.
+
+## This Week — casual weekly plans
+
+Lightweight, intentionally separate from the formal event system (`lib/weeklyPlans.ts`,
+`/this-week`). Friends mark candidate days **Works/Pass**, optionally star one **Best** day,
+and suggest simple ideas (dinner, drinks, movie, game night, outside, other). Day ranking:
+**Works desc → Best desc → Pass asc** → earliest. The creator confirms a day; a confirmed plan
+can be **converted into a formal event** (seeds attendance "going" from the Works voters).
+Do not fold a weekly plan into the events table until the user taps "Turn into Event."
 
 ## Design system rules (non-negotiable)
 
@@ -44,7 +61,8 @@ Conflict score per date option: `totalPoints − (blockedCount × 2)`.
   `Avatar`, `icons`. Reach for these before writing new markup.
 - **Status through `lib/status.ts`.** Don't hard-code status strings or colors.
 - **Categories through `lib/categories.ts`.** Icon + tint comes from keyword match on title.
-- **Shared data loader: `lib/planData.ts`.** Home, Calendar, Me all pull from here.
+- **Shared data loader: `lib/planData.ts`.** Home, Calendar, Me, Events all pull from here.
+  This Week has its own loader in `lib/weeklyPlans.ts` (separate data model).
 
 ## The PM system (read this before wandering)
 

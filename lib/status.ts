@@ -84,18 +84,25 @@ export const VOTE: Record<VoteResponse, StatusToken & { points: number }> = {
 /**
  * Infer an event's display status from DB state.
  * - 'confirmed' if explicitly confirmed
- * - 'voting'    if the event has date options and any votes exist
- * - 'hosting'   (fallback) if current user created it and it's still planning
- * - 'tentative' otherwise
+ * - 'voting'    if the event has date options and isn't confirmed — i.e. there
+ *               are dates on the ballot, whether or not anyone has voted yet.
+ *               (Previously this required voteCount > 0, which perversely hid
+ *               the events that most needed a *first* vote.)
+ * - 'hosting'   if the current user created it but hasn't added dates yet —
+ *               the host's to-do is "propose dates to start the vote."
+ * - 'tentative' otherwise (someone else proposed it, no dates yet)
+ *
+ * `voteCount` is no longer used for the status decision; it's kept in the input
+ * shape because callers already have it and may pass it for other reasons.
  */
 export function inferEventStatus(input: {
   status: string | null | undefined
   hasDateOptions: boolean
-  voteCount: number
+  voteCount?: number
   createdByCurrentUser: boolean
 }): EventStatus {
   if (input.status === 'confirmed') return 'confirmed'
-  if (input.hasDateOptions && input.voteCount > 0) return 'voting'
+  if (input.hasDateOptions) return 'voting'
   if (input.createdByCurrentUser) return 'hosting'
   return 'tentative'
 }

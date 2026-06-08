@@ -7,10 +7,9 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useName } from '@/lib/useName'
-import { ensureUser } from '@/lib/ensureUser'
 import { categoryFor } from '@/lib/categories'
 import { compactEventDetails, eventDraftFromRecord, eventPayloadFromDraft, hasEventLogistics, type EventDetailsDraft } from '@/lib/eventDetails'
-import { inferEventStatus } from '@/lib/status'
+import { loadPlanData, type EnrichedEvent } from '@/lib/planData'
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import StatusChip from '../components/StatusChip'
@@ -19,85 +18,36 @@ import EventLocationFields from '../components/EventLocationFields'
 import Icon from '../components/Icon'
 import { eachDay } from '@/lib/date'
 
-type Event = {
-  id: string
-  title: string
-  description: string | null
-  status: string
-  created_by: string | null
-  created_at: string
-  location_name?: string | null
-  location_address?: string | null
-  location_notes?: string | null
-  event_notes?: string | null
-  start_time?: string | null
-  end_time?: string | null
-  dateCount: number
-  voteCount: number
-  myConflictCount: number
-}
-
 export default function EventsPage() {
   const [name] = useName()
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<EnrichedEvent[]>([])
+  const [myBlackouts, setMyBlackouts] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<EventDetailsDraft>(() => eventDraftFromRecord())
   const [submitting, setSubmitting] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [showPast, setShowPast] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { loadEvents() }, [name]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [name]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function loadEvents() {
+  // One enrichment path now — the shared loader that Home/Calendar/Me use too.
+  async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('events')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (!data) { setLoading(false); return }
-
-    const [{ data: dateOptions }, { data: votes }] = await Promise.all([
-      supabase.from('date_options').select('id, event_id, date, end_date'),
-      supabase.from('votes').select('id, date_option_id'),
-    ])
-
-    type OptionRow = { id: string; date: string; end_date: string | null }
-    const optionsByEvent: Record<string, OptionRow[]> = {}
-    for (const opt of dateOptions ?? []) {
-      ;(optionsByEvent[opt.event_id] ??= []).push({ id: opt.id, date: opt.date, end_date: opt.end_date ?? null })
-    }
-    const votesByOption: Record<string, number> = {}
-    for (const v of votes ?? []) {
-      votesByOption[v.date_option_id] = (votesByOption[v.date_option_id] ?? 0) + 1
-    }
-
-    let myBlackouts: Set<string> = new Set()
-    if (name) {
-      const userId = await ensureUser(name)
-      const { data: avail } = await supabase
-        .from('availability')
-        .select('date')
-        .eq('user_id', userId)
-      myBlackouts = new Set((avail ?? []).map((r) => r.date))
-    }
-
-    const enriched: Event[] = data.map((ev) => {
-      const opts = optionsByEvent[ev.id] ?? []
-      const totalVotes = opts.reduce((sum, o) => sum + (votesByOption[o.id] ?? 0), 0)
-      // An option counts as conflicting if ANY day in its range overlaps a
-      // blackout. Single-day options pass end_date=null and eachDay returns
-      // just the start.
-      const myConflictCount = name
-        ? opts.filter((o) => eachDay(o.date, o.end_date).some((d) => myBlackouts.has(d))).length
-        : 0
-      return { ...ev, dateCount: opts.length, voteCount: totalVotes, myConflictCount }
-    })
-
-    setEvents(enriched)
+    const data = await loadPlanData(name || null)
+    setEvents(data.events)
+    setMyBlackouts(
+      new Set(data.availability.filter((row) => row.user_id === data.me.userId).map((row) => row.date)),
+    )
     setLoading(false)
   }
+
+  // Live events float votable ones to the top; completed events collapse away.
+  const liveEvents = [...events]
+    .filter((ev) => !ev.isPast)
+    .sort((a, b) => Number(b.needsMyVote) - Number(a.needsMyVote))
+  const pastEvents = events.filter((ev) => ev.isPast)
 
   async function createEvent() {
     if (!form.title.trim() || !name) return
@@ -124,7 +74,7 @@ export default function EventsPage() {
     setShowDetails(false)
     setShowForm(false)
     setSubmitting(false)
-    await loadEvents()
+    await load()
   }
 
   function updateForm<K extends keyof EventDetailsDraft>(key: K, value: EventDetailsDraft[K]) {
@@ -271,52 +221,69 @@ export default function EventsPage() {
         </Card>
       )}
 
-      {/* Events list */}
+      {/* Live events — votable ones first */}
       <div className="flex flex-col gap-2.5">
-        {events.map((ev) => {
-          const cat = categoryFor(ev.title)
-          const status = inferEventStatus({
-            status: ev.status,
-            hasDateOptions: ev.dateCount > 0,
-            voteCount: ev.voteCount,
-            createdByCurrentUser: !!name && ev.created_by === name,
-          })
-          return (
-            <Link key={ev.id} href={`/events/${ev.id}`}>
-              <Card className="flex items-center gap-3">
-                <IconTile name={cat.iconName} tint={cat.tint} size={48} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <StatusChip status={status} size="xs" />
-                  </div>
-                  <p className="font-semibold text-ink truncate">{ev.title}</p>
-                  <p className="text-xs text-ink-soft mt-0.5 truncate">
-                    {compactEventDetails(ev)
-                      ?? (ev.dateCount > 0
-                        ? `${ev.dateCount} option${ev.dateCount !== 1 ? 's' : ''} · ${ev.voteCount} vote${ev.voteCount !== 1 ? 's' : ''}`
-                        : 'No dates proposed yet')}
-                  </p>
-                  {compactEventDetails(ev) ? (
-                    <p className="text-[11px] text-ink-mute mt-1 truncate">
-                      {ev.dateCount > 0
-                        ? `${ev.dateCount} option${ev.dateCount !== 1 ? 's' : ''} · ${ev.voteCount} vote${ev.voteCount !== 1 ? 's' : ''}`
-                        : 'No dates proposed yet'}
-                    </p>
-                  ) : null}
-                  {ev.myConflictCount > 0 && (
-                    <p className="text-xs font-semibold text-amber mt-1">
-                      You&apos;re blocked on {ev.myConflictCount} of these
-                    </p>
-                  )}
-                </div>
-                <Icon name="chevronRight" size={18} className="text-ink-faint" />
-              </Card>
-            </Link>
-          )
-        })}
+        {liveEvents.map((ev) => (
+          <EventRow key={ev.id} event={ev} conflicts={conflictCount(ev, myBlackouts)} />
+        ))}
       </div>
+
+      {/* Past plans — collapsed so completed stuff stops crowding the list */}
+      {pastEvents.length > 0 && (
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => setShowPast((v) => !v)}
+            className="flex w-full items-center justify-between rounded-[var(--radius-lg)] border border-stone/70 bg-cream px-4 py-3 text-sm font-semibold text-ink-soft"
+          >
+            <span>Past plans · {pastEvents.length}</span>
+            <Icon name="chevronDown" size={16} className={showPast ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+          {showPast && (
+            <div className="mt-2.5 flex flex-col gap-2.5">
+              {pastEvents.map((ev) => (
+                <EventRow key={ev.id} event={ev} conflicts={0} muted />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </main>
   )
+}
+
+function EventRow({ event, conflicts, muted = false }: { event: EnrichedEvent; conflicts: number; muted?: boolean }) {
+  const cat = categoryFor(event.title)
+  const details = compactEventDetails(event)
+  const dateCount = event.dateOptions.length
+  const countsLine = dateCount > 0
+    ? `${dateCount} option${dateCount !== 1 ? 's' : ''} · ${event.voteCount} vote${event.voteCount !== 1 ? 's' : ''}`
+    : 'No dates proposed yet'
+  return (
+    <Link href={`/events/${event.id}`}>
+      <Card className={`flex items-center gap-3 ${muted ? 'opacity-70' : ''}`}>
+        <IconTile name={cat.iconName} tint={cat.tint} size={48} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <StatusChip status={event.displayStatus} size="xs" />
+          </div>
+          <p className="font-semibold text-ink truncate">{event.title}</p>
+          <p className="text-xs text-ink-soft mt-0.5 truncate">{details ?? countsLine}</p>
+          {details ? <p className="text-[11px] text-ink-mute mt-1 truncate">{countsLine}</p> : null}
+          {!muted && conflicts > 0 && (
+            <p className="text-xs font-semibold text-amber mt-1">You&apos;re blocked on {conflicts} of these</p>
+          )}
+        </div>
+        <Icon name="chevronRight" size={18} className="text-ink-faint" />
+      </Card>
+    </Link>
+  )
+}
+
+// An option conflicts if ANY day in its range overlaps one of my blackout dates.
+function conflictCount(event: EnrichedEvent, blackouts: Set<string>): number {
+  if (blackouts.size === 0) return 0
+  return event.dateOptions.filter((o) => eachDay(o.date, o.end_date ?? null).some((d) => blackouts.has(d))).length
 }
 
 function eventSaveError(message: string) {

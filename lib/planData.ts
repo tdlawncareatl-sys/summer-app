@@ -60,6 +60,12 @@ export type EnrichedEvent = RawEvent & {
   availableNames: string[]
   blockedNames: string[]
   participantNames: string[]
+  /** Has the current user cast any vote on this event's date options? */
+  iVoted: boolean
+  /** Votable (has dates, not confirmed) AND the current user hasn't voted yet. */
+  needsMyVote: boolean
+  /** Confirmed and its (end) date is in the past — i.e. it already happened. */
+  isPast: boolean
 }
 
 export type PlanData = {
@@ -111,10 +117,14 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
 
   const votesByOption: Record<string, RawVote[]> = {}
   const voteCountByOption: Record<string, number> = {}
+  const myVotedOptionIds = new Set<string>()
   for (const v of (votes ?? []) as RawVote[]) {
     ;(votesByOption[v.date_option_id] ??= []).push(v)
     voteCountByOption[v.date_option_id] = (voteCountByOption[v.date_option_id] ?? 0) + 1
+    if (myUserId && v.user_id === myUserId) myVotedOptionIds.add(v.date_option_id)
   }
+
+  const today = todayLocalISO()
 
   // Enrich events
   const enriched: EnrichedEvent[] = ((events ?? []) as RawEvent[]).map((ev) => {
@@ -168,6 +178,13 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
     // Participant names = for display on cards, anyone not blocked (proxy for "going")
     const participantNames = availableNames
 
+    // Per-user vote state. `voting` now means "has dates, not confirmed", so
+    // needsMyVote = there's something to vote on and I haven't weighed in.
+    const iVoted = opts.some((o) => myVotedOptionIds.has(o.id))
+    const needsMyVote = !!myUserId && displayStatus === 'voting' && !iVoted
+    const lastDay = topEndDate ?? topDate
+    const isPast = ev.status === 'confirmed' && !!lastDay && lastDay < today
+
     return {
       ...ev,
       dateOptions: opts,
@@ -178,6 +195,9 @@ export async function loadPlanData(myName: string | null): Promise<PlanData> {
       blockedNames,
       availableNames,
       participantNames,
+      iVoted,
+      needsMyVote,
+      isPast,
     }
   })
 

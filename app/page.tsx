@@ -5,11 +5,14 @@ import { useEffect, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor, type CategoryTint } from '@/lib/categories'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
+import { dayWeekday, dayLong, ideaCategoryMeta, type WeeklyPlanSummary } from '@/lib/weeklyPlans'
+import { loadWeeklyPlanSummary } from '@/lib/weeklyPlansData'
 import PageHeader from './components/PageHeader'
 import Card from './components/Card'
 import IconTile from './components/IconTile'
 import { AvatarStack } from './components/Avatar'
 import Icon from './components/Icon'
+import StatusChip from './components/StatusChip'
 import type { IconName } from '@/lib/icons'
 
 type FeatureCard = {
@@ -23,11 +26,15 @@ type FeatureCard = {
 export default function Home() {
   const [name] = useName()
   const [data, setData] = useState<PlanData | null>(null)
+  const [week, setWeek] = useState<WeeklyPlanSummary | null>(null)
 
   useEffect(() => {
     let alive = true
     loadPlanData(name || null).then((next) => {
       if (alive) setData(next)
+    })
+    loadWeeklyPlanSummary().then((next) => {
+      if (alive) setWeek(next)
     })
     return () => {
       alive = false
@@ -37,6 +44,10 @@ export default function Home() {
   const events = data?.events ?? []
   const ideas = data?.ideas ?? []
   const today = todayISO()
+
+  const needsVote = [...events]
+    .filter((event) => event.needsMyVote)
+    .sort((a, b) => (a.topDate ?? '9999-12-31').localeCompare(b.topDate ?? '9999-12-31'))
 
   const votingEvents = [...events]
     .filter((event) => event.displayStatus === 'voting')
@@ -101,7 +112,23 @@ export default function Home() {
             ))}
           </section>
 
-          {jumpBackIn && (
+          {needsVote.length > 0 && (
+            <section className="mt-7">
+              <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
+              <div className="flex flex-col gap-2.5">
+                {needsVote.slice(0, 3).map((event) => (
+                  <NeedsVoteCard key={event.id} event={event} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="mt-7">
+            <SectionHeader title="This Week" href="/this-week" linkLabel="Open" />
+            <ThisWeekCard week={week} />
+          </section>
+
+          {needsVote.length === 0 && jumpBackIn && (
             <section className="mt-7">
               <SectionHeader title="Jump back in" href="/events" linkLabel="See all" />
               <JumpBackInCard event={jumpBackIn} />
@@ -217,6 +244,107 @@ function JumpBackInCard({ event }: { event: EnrichedEvent }) {
         </div>
       </Card>
     </Link>
+  )
+}
+
+function NeedsVoteCard({ event }: { event: EnrichedEvent }) {
+  const category = categoryFor(event.title)
+  return (
+    <Link href={`/events/${event.id}`}>
+      <Card className="flex items-center gap-3">
+        <IconTile name={category.iconName} tint={category.tint} size={48} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5">
+            <StatusChip status="voting" size="xs" />
+          </div>
+          <p className="truncate font-semibold text-ink">{event.title}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            {event.voteCount > 0
+              ? `${event.dateOptions.length} date${event.dateOptions.length !== 1 ? 's' : ''} · ${event.voteCount} vote${event.voteCount !== 1 ? 's' : ''} so far`
+              : 'Be the first to vote'}
+          </p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-terracotta px-3 py-1.5 text-xs font-bold text-white">
+          Vote
+          <Icon name="arrowRight" size={13} />
+        </span>
+      </Card>
+    </Link>
+  )
+}
+
+function ThisWeekCard({ week }: { week: WeeklyPlanSummary | null }) {
+  if (!week) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <IconTile name="calendar" tint="teal" size={48} rounded="lg" />
+          <div className="min-w-0">
+            <p className="font-semibold text-ink">No plan going yet</p>
+            <p className="mt-0.5 text-xs text-ink-soft">Find the best night for a casual hang.</p>
+          </div>
+        </div>
+        <Link
+          href="/this-week?new=1"
+          className="w-full rounded-xl bg-olive py-2.5 text-center text-sm font-bold text-white active:scale-[0.98]"
+        >
+          Start Quick Plan
+        </Link>
+      </Card>
+    )
+  }
+
+  const confirmed = week.status === 'confirmed'
+  const focusDay = week.confirmedDay ?? week.leadingDay?.day ?? null
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <IconTile name="calendar" tint={confirmed ? 'olive' : 'teal'} size={48} rounded="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold text-ink">{week.title}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            {confirmed && focusDay
+              ? `Locked · ${dayLong(focusDay)}`
+              : week.leadingDay
+                ? `${dayWeekday(week.leadingDay.day)} leading · ${week.availableCount} in`
+                : 'No votes yet — be the first'}
+          </p>
+        </div>
+      </div>
+
+      {week.topIdeas.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {week.topIdeas.map((idea) => {
+            const meta = ideaCategoryMeta(idea.category)
+            return (
+              <span
+                key={idea.text}
+                className="inline-flex items-center gap-1.5 rounded-full bg-sand px-2.5 py-1 text-[11px] font-semibold text-ink-soft"
+              >
+                {meta ? <Icon name={meta.iconName} size={12} /> : null}
+                {idea.text}
+              </span>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <div className="flex gap-2">
+        <Link
+          href="/this-week"
+          className="flex-1 rounded-xl bg-olive py-2.5 text-center text-sm font-bold text-white active:scale-[0.98]"
+        >
+          {confirmed ? 'View plan' : 'Vote This Week'}
+        </Link>
+        <Link
+          href="/this-week?new=1"
+          className="rounded-xl border border-stone/70 bg-cream px-4 py-2.5 text-center text-sm font-semibold text-ink-soft active:scale-[0.98]"
+        >
+          New
+        </Link>
+      </div>
+    </Card>
   )
 }
 
