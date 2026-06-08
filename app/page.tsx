@@ -57,6 +57,11 @@ export default function Home() {
     .filter((event) => event.needsMyVote)
     .sort((a, b) => (a.topDate ?? '9999-12-31').localeCompare(b.topDate ?? '9999-12-31'))
 
+  // Confirmed plans further out than this week — a light horizontal strip.
+  const comingUpLater = [...events]
+    .filter((event) => event.displayStatus === 'confirmed' && event.topDate && event.topDate > weekEnd)
+    .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))
+
   return (
     <main className="max-w-md mx-auto px-5">
       <PageHeader variant="greeting" />
@@ -77,7 +82,7 @@ export default function Home() {
             <ThisWeekCard week={week} />
           </section>
 
-          <section className="mt-7 mb-4">
+          <section className="mt-7">
             <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
             {needsVote.length > 0 ? (
               <div className="flex flex-col gap-2.5">
@@ -92,6 +97,17 @@ export default function Home() {
               </Card>
             )}
           </section>
+
+          {comingUpLater.length > 0 && (
+            <section className="mt-7 mb-4">
+              <SectionHeader title="Coming up later" href="/calendar" linkLabel="Calendar" />
+              <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
+                {comingUpLater.map((event) => (
+                  <ComingUpLaterCard key={event.id} event={event} />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </main>
@@ -227,6 +243,21 @@ function NeedsVoteCard({ event }: { event: EnrichedEvent }) {
           Vote
           <Icon name="arrowRight" size={13} />
         </span>
+      </Card>
+    </Link>
+  )
+}
+
+function ComingUpLaterCard({ event }: { event: EnrichedEvent }) {
+  const category = categoryFor(event.title)
+  return (
+    <Link href={`/events/${event.id}`} className="min-w-[158px] max-w-[158px] shrink-0">
+      <Card className="h-full p-3.5">
+        <IconTile name={category.iconName} tint={category.tint} size={44} rounded="full" />
+        <p className="mt-3 truncate text-sm font-bold text-ink">{event.title}</p>
+        <p className="mt-1 text-xs text-ink-soft">
+          {event.topDate ? formatDateRangeShort(event.topDate, event.topEndDate) : 'Date TBD'}
+        </p>
       </Card>
     </Link>
   )
