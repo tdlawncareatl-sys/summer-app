@@ -8,12 +8,14 @@ import {
   enrichWeeklyPlan,
   isMissingTableError,
   topIdeas,
+  weekDays,
   weekStartFor,
   worksUserIdsForDay,
   type DayAvailability,
   type EnrichedWeeklyPlan,
   type IdeaCategory,
   type ThisWeekData,
+  type TimePreference,
   type WeeklyPlanRow,
   type WeeklyPlanStatus,
   type WeeklyPlanSummary,
@@ -70,22 +72,25 @@ export async function loadThisWeek(): Promise<ThisWeekData> {
     return { tablesMissing: false, plans: [], userMap: {} }
   }
 
-  const [{ data: users }, { data: voteRows }, { data: ideaRows }] = await Promise.all([
+  const [{ data: users }, { data: voteRows }, { data: ideaRows }, { data: availabilityRows }] = await Promise.all([
     supabase.from('users').select('id, name'),
     supabase
       .from('weekly_plan_votes')
-      .select('id, weekly_plan_id, user_id, day, availability, is_best_choice')
+      .select('id, weekly_plan_id, user_id, day, availability, is_best_choice, time_preference')
       .in('weekly_plan_id', planIds),
     supabase
       .from('weekly_plan_ideas')
       .select('id, weekly_plan_id, user_id, idea_text, category, created_at')
       .in('weekly_plan_id', planIds)
       .order('created_at', { ascending: false }),
+    // The "who's in town" overlay reads the same blackout calendar everything
+    // else uses. Informational only — it never changes day ranking.
+    supabase.from('availability').select('user_id, date'),
   ])
 
-  const userMap: Record<string, string> = Object.fromEntries(
-    ((users ?? []) as { id: string; name: string }[]).map((u) => [u.id, u.name]),
-  )
+  const userList = (users ?? []) as { id: string; name: string }[]
+  const userMap: Record<string, string> = Object.fromEntries(userList.map((u) => [u.id, u.name]))
+  const availability = (availabilityRows ?? []) as { user_id: string; date: string }[]
 
   const votesByPlan: Record<string, WeeklyVoteRow[]> = {}
   for (const v of (voteRows ?? []) as WeeklyVoteRow[]) {
@@ -97,7 +102,7 @@ export async function loadThisWeek(): Promise<ThisWeekData> {
   }
 
   const enriched = plans.map((plan) =>
-    enrichWeeklyPlan(plan, votesByPlan[plan.id] ?? [], ideasByPlan[plan.id] ?? []),
+    enrichWeeklyPlan(plan, votesByPlan[plan.id] ?? [], ideasByPlan[plan.id] ?? [], userList, availability),
   )
   return { tablesMissing: false, plans: enriched, userMap }
 }
@@ -129,9 +134,10 @@ export async function createWeeklyPlan(input: {
   title: string
   note: string
   weekStart: string
-  candidateDays: string[]
 }): Promise<{ id: string | null; error: string | null }> {
   const title = input.title.trim() || 'Hang this week?'
+  // The whole week is the canvas — every day is a candidate. People express
+  // preferences across it rather than the creator proposing a subset.
   const { data, error } = await supabase
     .from('weekly_plans')
     .insert({
@@ -139,7 +145,7 @@ export async function createWeeklyPlan(input: {
       title,
       note: input.note.trim() || null,
       week_start_date: input.weekStart,
-      candidate_days: input.candidateDays,
+      candidate_days: weekDays(input.weekStart),
       status: 'open',
     })
     .select('id')
@@ -170,7 +176,9 @@ export async function castWeeklyVote(input: {
       user_id: userId,
       day,
       availability,
+      // Pass clears both the Best star and any time preference; Works keeps them.
       is_best_choice: availability === 'pass' ? false : (existing?.is_best_choice ?? false),
+      time_preference: availability === 'pass' ? null : (existing?.time_preference ?? null),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'weekly_plan_id,user_id,day' },
@@ -214,6 +222,33 @@ export async function setWeeklyBest(input: {
       day,
       availability: 'works', // starring a day means it works for you
       is_best_choice: true,
+      time_preference: current?.time_preference ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'weekly_plan_id,user_id,day' },
+  )
+  return { error: error?.message ?? null }
+}
+
+/** Set/clear this user's time-of-day preference on a day. Only meaningful on a
+ *  Works vote (gated in the UI); re-tapping the current slot clears it. */
+export async function setWeeklyTimePreference(input: {
+  planId: string
+  userId: string
+  day: string
+  slot: TimePreference
+  existing?: WeeklyVoteRow | null
+}): Promise<{ error: string | null }> {
+  const { planId, userId, day, slot, existing } = input
+  const next = existing?.time_preference === slot ? null : slot
+  const { error } = await supabase.from('weekly_plan_votes').upsert(
+    {
+      weekly_plan_id: planId,
+      user_id: userId,
+      day,
+      availability: 'works',
+      is_best_choice: existing?.is_best_choice ?? false,
+      time_preference: next,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'weekly_plan_id,user_id,day' },

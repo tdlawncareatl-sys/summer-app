@@ -10,8 +10,12 @@
 // ...then earliest day as a final, deterministic tiebreak.
 
 import { toLocalISODate } from './date'
+import { scoreRange, type AvailabilityRow, type Participant } from './availability'
+import { pickTopTimePreference, type TimePreference } from './voting'
 import type { CategoryTint } from './categories'
 import type { IconName } from './icons'
+
+export type { TimePreference } from './voting'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -40,6 +44,7 @@ export type WeeklyVoteRow = {
   day: string
   availability: DayAvailability
   is_best_choice: boolean
+  time_preference: TimePreference | null
 }
 
 export type WeeklyIdeaRow = {
@@ -57,6 +62,19 @@ export type DayTally = {
   worksCount: number
   passCount: number
   bestCount: number
+  /** Most-popular time block among this day's Works voters, or null. */
+  topTimePreference: TimePreference | null
+}
+
+/** Per-day availability rollup from the blackout calendar (the "who's in town"
+ *  overlay). Mirrors the free/blocked/unknown model used everywhere else. */
+export type DayAvailabilitySummary = {
+  inTown: number
+  outOfTown: number
+  unknown: number
+  total: number
+  /** Names marked out of town (blocked) that day. */
+  outNames: string[]
 }
 
 export type EnrichedWeeklyPlan = WeeklyPlanRow & {
@@ -66,6 +84,8 @@ export type EnrichedWeeklyPlan = WeeklyPlanRow & {
   ideas: WeeklyIdeaRow[]
   /** distinct users who cast at least one vote on this plan */
   participantCount: number
+  /** day ISO → who's in town / out of town that day */
+  availabilityByDay: Record<string, DayAvailabilitySummary>
 }
 
 export type WeeklyPlanSummary = {
@@ -155,12 +175,23 @@ export function dayLong(iso: string): string {
 
 /* ── Tally & ranking ─────────────────────────────────────────────────────── */
 
-type VoteLike = { day: string; availability: DayAvailability; is_best_choice: boolean }
+type VoteLike = {
+  day: string
+  availability: DayAvailability
+  is_best_choice: boolean
+  time_preference?: TimePreference | null
+}
+
+function emptyTimeCounts(): Record<TimePreference, number> {
+  return { morning: 0, afternoon: 0, evening: 0, flexible: 0 }
+}
 
 export function tallyWeeklyDays(candidateDays: string[], votes: VoteLike[]): DayTally[] {
   const byDay: Record<string, DayTally> = {}
+  const timeByDay: Record<string, Record<TimePreference, number>> = {}
   for (const day of candidateDays) {
-    byDay[day] = { day, worksCount: 0, passCount: 0, bestCount: 0 }
+    byDay[day] = { day, worksCount: 0, passCount: 0, bestCount: 0, topTimePreference: null }
+    timeByDay[day] = emptyTimeCounts()
   }
   for (const vote of votes) {
     const tally = byDay[vote.day]
@@ -168,9 +199,13 @@ export function tallyWeeklyDays(candidateDays: string[], votes: VoteLike[]): Day
     if (vote.availability === 'works') {
       tally.worksCount++
       if (vote.is_best_choice) tally.bestCount++
+      if (vote.time_preference) timeByDay[vote.day][vote.time_preference]++
     } else {
       tally.passCount++
     }
+  }
+  for (const day of candidateDays) {
+    byDay[day].topTimePreference = pickTopTimePreference(timeByDay[day])
   }
   return candidateDays.map((day) => byDay[day])
 }
@@ -223,16 +258,32 @@ export function worksUserIdsForDay(votes: WeeklyVoteRow[], day: string | null): 
   return [...ids]
 }
 
-/** Enrich a plan with rankings + participant count. Pure — reused by the loader. */
+/** Enrich a plan with rankings, participant count, and the per-day "who's in
+ *  town" overlay. Pure — reused by the loader and unit-testable. */
 export function enrichWeeklyPlan(
   plan: WeeklyPlanRow,
   votes: WeeklyVoteRow[],
   ideas: WeeklyIdeaRow[],
+  participants: Participant[] = [],
+  availability: AvailabilityRow[] = [],
 ): EnrichedWeeklyPlan {
   const ranked = rankWeeklyDays(plan.candidate_days, votes)
   const leadingDay = leadingWeeklyDay(ranked)
   const participantCount = new Set(votes.map((v) => v.user_id)).size
-  return { ...plan, ranked, leadingDay, votes, ideas, participantCount }
+
+  const availabilityByDay: Record<string, DayAvailabilitySummary> = {}
+  for (const day of plan.candidate_days) {
+    const scored = scoreRange(day, day, participants, availability)
+    availabilityByDay[day] = {
+      inTown: scored.buckets.free,
+      outOfTown: scored.buckets.blocked,
+      unknown: scored.buckets.unknown,
+      total: scored.buckets.total,
+      outNames: scored.blockedNames,
+    }
+  }
+
+  return { ...plan, ranked, leadingDay, votes, ideas, participantCount, availabilityByDay }
 }
 
 /* ── Misc ────────────────────────────────────────────────────────────────── */

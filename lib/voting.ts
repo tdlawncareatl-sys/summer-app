@@ -75,7 +75,7 @@ export function tallyOption(votes: VoteRow[]): OptionTally {
   }
 }
 
-function pickTopTimePreference(counts: Record<TimePreference, number>): TimePreference | null {
+export function pickTopTimePreference(counts: Record<TimePreference, number>): TimePreference | null {
   // Concrete blocks beat flexible; among concrete blocks the highest count
   // wins, with ties resolving to the earlier slot in the day.
   const concrete: TimePreference[] = ['morning', 'afternoon', 'evening']

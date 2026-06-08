@@ -8,10 +8,16 @@ import {
   weekStartFor,
   weekDays,
   type DayAvailability,
+  type TimePreference,
 } from '@/lib/weeklyPlans'
 
-type V = { day: string; availability: DayAvailability; is_best_choice: boolean }
-const works = (day: string, best = false): V => ({ day, availability: 'works', is_best_choice: best })
+type V = { day: string; availability: DayAvailability; is_best_choice: boolean; time_preference?: TimePreference | null }
+const works = (day: string, best = false, time: TimePreference | null = null): V => ({
+  day,
+  availability: 'works',
+  is_best_choice: best,
+  time_preference: time,
+})
 const pass = (day: string): V => ({ day, availability: 'pass', is_best_choice: false })
 
 describe('tallyWeeklyDays', () => {
@@ -22,14 +28,28 @@ describe('tallyWeeklyDays', () => {
       works('2026-06-09'),
       pass('2026-06-10'),
     ])
-    expect(tallies[0]).toEqual({ day: '2026-06-09', worksCount: 2, passCount: 0, bestCount: 1 })
-    expect(tallies[1]).toEqual({ day: '2026-06-10', worksCount: 0, passCount: 1, bestCount: 0 })
+    expect(tallies[0]).toEqual({ day: '2026-06-09', worksCount: 2, passCount: 0, bestCount: 1, topTimePreference: null })
+    expect(tallies[1]).toEqual({ day: '2026-06-10', worksCount: 0, passCount: 1, bestCount: 0, topTimePreference: null })
   })
 
   it('ignores votes for days not on the ballot', () => {
     const tallies = tallyWeeklyDays(['2026-06-09'], [works('2026-06-11')])
     expect(tallies).toHaveLength(1)
     expect(tallies[0].worksCount).toBe(0)
+  })
+
+  it('surfaces the leading time-of-day among works voters', () => {
+    const tallies = tallyWeeklyDays(['2026-06-09'], [
+      works('2026-06-09', false, 'evening'),
+      works('2026-06-09', false, 'evening'),
+      works('2026-06-09', false, 'morning'),
+    ])
+    expect(tallies[0].topTimePreference).toBe('evening')
+  })
+
+  it('leaves time-of-day null when no one picked a block', () => {
+    const tallies = tallyWeeklyDays(['2026-06-09'], [works('2026-06-09'), pass('2026-06-09')])
+    expect(tallies[0].topTimePreference).toBeNull()
   })
 })
 
@@ -87,9 +107,9 @@ describe('topIdeas', () => {
 describe('worksUserIdsForDay', () => {
   it('returns distinct user ids that marked works on the day', () => {
     const votes = [
-      { id: '1', weekly_plan_id: 'p', user_id: 'a', day: '2026-06-09', availability: 'works' as const, is_best_choice: false },
-      { id: '2', weekly_plan_id: 'p', user_id: 'b', day: '2026-06-09', availability: 'pass' as const, is_best_choice: false },
-      { id: '3', weekly_plan_id: 'p', user_id: 'a', day: '2026-06-10', availability: 'works' as const, is_best_choice: false },
+      { id: '1', weekly_plan_id: 'p', user_id: 'a', day: '2026-06-09', availability: 'works' as const, is_best_choice: false, time_preference: null },
+      { id: '2', weekly_plan_id: 'p', user_id: 'b', day: '2026-06-09', availability: 'pass' as const, is_best_choice: false, time_preference: null },
+      { id: '3', weekly_plan_id: 'p', user_id: 'a', day: '2026-06-10', availability: 'works' as const, is_best_choice: false, time_preference: null },
     ]
     expect(worksUserIdsForDay(votes, '2026-06-09')).toEqual(['a'])
     expect(worksUserIdsForDay(votes, null)).toEqual([])

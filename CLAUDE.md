@@ -45,12 +45,17 @@ events that need a *first* vote are surfaced, not hidden. Logic lives in `lib/st
 
 ## This Week — casual weekly plans
 
-Lightweight, intentionally separate from the formal event system (`lib/weeklyPlans.ts`,
-`/this-week`). Friends mark candidate days **Works/Pass**, optionally star one **Best** day,
-and suggest simple ideas (dinner, drinks, movie, game night, outside, other). Day ranking:
-**Works desc → Best desc → Pass asc** → earliest. The creator confirms a day; a confirmed plan
-can be **converted into a formal event** (seeds attendance "going" from the Works voters).
-Do not fold a weekly plan into the events table until the user taps "Turn into Event."
+Lightweight, intentionally separate from the formal event system. Pure logic in
+`lib/weeklyPlans.ts`, Supabase loaders/mutations in `lib/weeklyPlansData.ts`, UI at `/this-week`.
+
+The **whole week (Mon–Sun) is the canvas** — the creator does not propose a subset of days
+(`candidate_days` is auto-filled with all 7). Everyone marks each day **Works/Pass**, optionally
+picks one time block (morning/afternoon/evening), and stars one **Best** day, plus simple ideas
+(dinner, drinks, movie, game night, outside, other). The **availability calendar overlays each
+day** (who's in town vs out of town) via `scoreRange` — informational only, it does **not** change
+ranking. Day ranking: **Works desc → Best desc → Pass asc** → earliest. The creator confirms a
+day; a confirmed plan can be **converted into a formal event** (seeds attendance "going" from the
+Works voters). Do not fold a weekly plan into the events table until the user taps "Turn into Event."
 
 ## Design system rules (non-negotiable)
 

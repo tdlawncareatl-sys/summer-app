@@ -1,9 +1,10 @@
 'use client'
 
 // This Week — casual, low-friction weekly hangout planning. Deliberately
-// lighter than the formal events flow: pick candidate nights, friends tap
-// Works/Pass (+ one Best star), toss out simple ideas, the creator confirms a
-// day, and a confirmed plan can graduate into a real event.
+// lighter than the formal events flow. The whole week (Mon–Sun) is the canvas:
+// friends tap Works/Pass on any day (+ an optional time block and one Best
+// star), the "who's in town" availability overlay shows context, the creator
+// confirms a day, and a confirmed plan can graduate into a real event.
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -11,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useName } from '@/lib/useName'
 import { ensureUser } from '@/lib/ensureUser'
 import { todayLocalISO } from '@/lib/date'
+import { TIME_PREFERENCE_LABELS } from '@/lib/voting'
 import {
   weekStartFor,
   weekDays,
@@ -27,17 +29,23 @@ import {
   type WeeklyVoteRow,
   type DayAvailability,
   type IdeaCategory,
+  type TimePreference,
 } from '@/lib/weeklyPlans'
 import {
   loadThisWeek,
   createWeeklyPlan,
   castWeeklyVote,
   setWeeklyBest,
+  setWeeklyTimePreference,
   addWeeklyIdea,
   confirmWeeklyPlan,
   reopenWeeklyPlan,
   convertWeeklyPlanToEvent,
 } from '@/lib/weeklyPlansData'
+
+// Time blocks offered in the UI (we skip 'flexible' — leaving a day with no
+// time picked is the implicit "whenever").
+const TIME_SLOTS: TimePreference[] = ['morning', 'afternoon', 'evening']
 import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import Icon from '../components/Icon'
@@ -207,29 +215,19 @@ function CreatePlan({
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = shiftWeek(thisWeek, weekOffset)
   const days = weekDays(weekStart)
+  const rangeLabel = `${dayLabel(days[0])} – ${dayLabel(days[6])}`
 
   const [title, setTitle] = useState('Hang this week?')
   const [note, setNote] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [category, setCategory] = useState<IdeaCategory | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  function toggleDay(iso: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(iso)) next.delete(iso)
-      else next.add(iso)
-      return next
-    })
-  }
-
   async function submit() {
-    if (!name || selected.size === 0 || submitting) return
+    if (!name || submitting) return
     setSubmitting(true)
     setError(null)
-    const candidateDays = [...selected].sort()
-    const { id, error: createError } = await createWeeklyPlan({ name, title, note, weekStart, candidateDays })
+    const { id, error: createError } = await createWeeklyPlan({ name, title, note, weekStart })
     if (createError || !id) {
       setError(createError ?? 'Could not create the plan.')
       setSubmitting(false)
@@ -261,10 +259,7 @@ function CreatePlan({
           <button
             key={w.offset}
             type="button"
-            onClick={() => {
-              setWeekOffset(w.offset)
-              setSelected(new Set())
-            }}
+            onClick={() => setWeekOffset(w.offset)}
             className={`flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ${
               weekOffset === w.offset ? 'bg-olive text-white' : 'bg-sand text-ink-soft'
             }`}
@@ -289,32 +284,9 @@ function CreatePlan({
         className="w-full rounded-xl border-0 bg-sand px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-olive"
       />
 
-      <div>
-        <p className="mb-2 text-xs font-semibold text-ink-mute">Which nights are on the table?</p>
-        <div className="grid grid-cols-7 gap-1.5">
-          {days.map((iso) => {
-            const isPast = iso < today
-            const isOn = selected.has(iso)
-            return (
-              <button
-                key={iso}
-                type="button"
-                disabled={isPast}
-                onClick={() => toggleDay(iso)}
-                className={`flex flex-col items-center rounded-xl py-2 text-center transition-colors ${
-                  isPast
-                    ? 'cursor-default text-ink-faint'
-                    : isOn
-                      ? 'bg-olive text-white'
-                      : 'bg-sand text-ink-soft'
-                }`}
-              >
-                <span className="text-[10px] font-semibold uppercase">{dayWeekday(iso).slice(0, 2)}</span>
-                <span className="text-sm font-bold">{Number(iso.slice(8, 10))}</span>
-              </button>
-            )
-          })}
-        </div>
+      <div className="flex items-center gap-2 rounded-xl bg-sand px-3 py-2.5 text-xs leading-5 text-ink-soft">
+        <Icon name="calendar" size={14} className="shrink-0" />
+        <span>The whole week is open ({rangeLabel}) — everyone picks the days that work for them.</span>
       </div>
 
       <div>
@@ -340,7 +312,7 @@ function CreatePlan({
 
       <button
         type="button"
-        disabled={!name || selected.size === 0 || submitting}
+        disabled={!name || submitting}
         onClick={submit}
         className="w-full rounded-xl bg-olive py-2.5 text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
       >
@@ -365,8 +337,10 @@ function OpenPlan({
   isCreator: boolean
   onChanged: () => Promise<void>
 }) {
+  const today = todayLocalISO()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const myVotes = useMemo(
     () => (myUserId ? plan.votes.filter((v) => v.user_id === myUserId) : []),
@@ -381,7 +355,7 @@ function OpenPlan({
   const chronological = useMemo(() => [...plan.candidate_days].sort(), [plan.candidate_days])
   const leadingDayIso = plan.leadingDay?.day ?? null
   const tallyByDay = useMemo(() => {
-    const map: Record<string, { worksCount: number; passCount: number; bestCount: number }> = {}
+    const map: Record<string, (typeof plan.ranked)[number]> = {}
     for (const t of plan.ranked) map[t.day] = t
     return map
   }, [plan.ranked])
@@ -402,9 +376,20 @@ function OpenPlan({
   async function star(day: string) {
     await run(() => setWeeklyBest({ planId: plan.id, userId: myUserId!, day, myVotes }))
   }
+  async function setTime(day: string, slot: TimePreference) {
+    await run(() => setWeeklyTimePreference({ planId: plan.id, userId: myUserId!, day, slot, existing: myVoteByDay[day] }))
+  }
   async function confirm(day: string) {
     if (!window.confirm(`Lock in ${dayLong(day)} for "${plan.title}"?`)) return
     await run(() => confirmWeeklyPlan({ planId: plan.id, day }))
+  }
+  function toggleExpand(day: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(day)) next.delete(day)
+      else next.add(day)
+      return next
+    })
   }
 
   return (
@@ -416,10 +401,16 @@ function OpenPlan({
           {plan.leadingDay ? (
             <>
               <span className="text-olive">{dayWeekday(plan.leadingDay.day)}</span> is leading
-              <span className="text-ink-mute"> · {plan.leadingDay.worksCount} in</span>
+              <span className="text-ink-mute">
+                {' · '}
+                {plan.leadingDay.worksCount} in
+                {plan.leadingDay.topTimePreference
+                  ? ` · ${TIME_PREFERENCE_LABELS[plan.leadingDay.topTimePreference].toLowerCase()}`
+                  : ''}
+              </span>
             </>
           ) : (
-            'No votes yet — be the first to mark a night.'
+            'No votes yet — be the first to mark a day.'
           )}
         </p>
         {plan.ranked.some((r) => r.worksCount > 0) ? (
@@ -445,12 +436,15 @@ function OpenPlan({
 
       <div className="flex flex-col gap-2.5">
         {chronological.map((iso) => {
-          const tally = tallyByDay[iso] ?? { worksCount: 0, passCount: 0, bestCount: 0 }
+          const tally = tallyByDay[iso] ?? { day: iso, worksCount: 0, passCount: 0, bestCount: 0, topTimePreference: null }
           const mine = myVoteByDay[iso]
+          const avail = plan.availabilityByDay[iso]
           const isLeading = iso === leadingDayIso
+          const isPast = iso < today
+          const isExpanded = expanded.has(iso)
           return (
-            <Card key={iso} className={isLeading ? 'border-olive/60 bg-olive-tint/40' : ''}>
-              <div className="flex items-center justify-between gap-3">
+            <Card key={iso} className={`${isLeading ? 'border-olive/60 bg-olive-tint/40' : ''} ${isPast ? 'opacity-60' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-ink">{dayLabel(iso)}</p>
@@ -460,15 +454,42 @@ function OpenPlan({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-0.5 text-xs text-ink-mute">
+
+                  {/* Availability overlay — who's in town (tap to see who's out) */}
+                  {avail && avail.total > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => avail.outNames.length > 0 && toggleExpand(iso)}
+                      className="mt-1 flex items-center gap-1.5 text-xs"
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${availDot(avail.outOfTown, avail.total)}`} />
+                      <span className="text-ink-soft">
+                        {avail.inTown} in town
+                        {avail.outOfTown > 0 ? ` · ${avail.outOfTown} out` : ''}
+                        {avail.unknown > 0 ? ` · ${avail.unknown}?` : ''}
+                      </span>
+                      {avail.outNames.length > 0 ? (
+                        <Icon
+                          name="chevronDown"
+                          size={11}
+                          className={`text-ink-faint transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      ) : null}
+                    </button>
+                  ) : null}
+
+                  {/* Group vote tally + leading time-of-day */}
+                  <p className="mt-1 text-xs text-ink-mute">
                     {tally.worksCount} works · {tally.passCount} pass
                     {tally.bestCount > 0 ? ` · ${tally.bestCount} ★` : ''}
+                    {tally.topTimePreference ? ` · ${TIME_PREFERENCE_LABELS[tally.topTimePreference].toLowerCase()}` : ''}
                   </p>
                 </div>
+
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    disabled={busy || !myUserId}
+                    disabled={busy || !myUserId || isPast}
                     onClick={() => vote(iso, 'works')}
                     aria-label="Works for me"
                     className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
@@ -479,7 +500,7 @@ function OpenPlan({
                   </button>
                   <button
                     type="button"
-                    disabled={busy || !myUserId}
+                    disabled={busy || !myUserId || isPast}
                     onClick={() => vote(iso, 'pass')}
                     aria-label="Pass"
                     className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
@@ -490,9 +511,9 @@ function OpenPlan({
                   </button>
                   <button
                     type="button"
-                    disabled={busy || !myUserId}
+                    disabled={busy || !myUserId || isPast}
                     onClick={() => star(iso)}
-                    aria-label="Mark as my best night"
+                    aria-label="Mark as my best day"
                     className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
                       mine?.is_best_choice ? 'bg-amber text-white' : 'bg-sand text-ink-faint'
                     }`}
@@ -501,7 +522,31 @@ function OpenPlan({
                   </button>
                 </div>
               </div>
-              {isCreator ? (
+
+              {isExpanded && avail && avail.outNames.length > 0 ? (
+                <p className="mt-2 text-xs text-blush">Out of town: {avail.outNames.join(', ')}</p>
+              ) : null}
+
+              {/* My time-of-day preference — only when I've said this day works */}
+              {mine?.availability === 'works' && !isPast ? (
+                <div className="mt-3 flex gap-1.5">
+                  {TIME_SLOTS.map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setTime(iso, slot)}
+                      className={`flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
+                        mine.time_preference === slot ? 'bg-teal text-white' : 'bg-sand text-ink-soft'
+                      }`}
+                    >
+                      {TIME_PREFERENCE_LABELS[slot]}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {isCreator && !isPast ? (
                 <button
                   type="button"
                   disabled={busy}
@@ -521,6 +566,14 @@ function OpenPlan({
       <IdeasBlock plan={plan} myUserId={myUserId} userMap={userMap} onChanged={onChanged} />
     </div>
   )
+}
+
+// Dot color for the in-town/out-of-town overlay: green when everyone's around,
+// amber when a few are out, blush when most are gone.
+function availDot(outOfTown: number, total: number): string {
+  if (outOfTown === 0) return 'bg-sage'
+  if (outOfTown <= total / 2) return 'bg-amber'
+  return 'bg-blush'
 }
 
 /* ── Confirmed plan + convert ────────────────────────────────────────────── */
