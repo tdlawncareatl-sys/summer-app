@@ -1,11 +1,11 @@
 'use client'
 
-// Home — three sections, no casual "This Week" voting card (that's been pulled
-// off home while it's refined; it still lives on the + menu):
+// Home — three sections (the casual "This Week" voting card lives on the + menu,
+// not here):
 //   1. This Week — any event with a date (confirmed OR a proposed option still
-//      being voted on) landing this calendar week
-//   2. Needs your vote — votable events whose dates are NOT this week (the
-//      in-week ones already show above, with a Vote button)
+//      being voted on) landing this calendar week — the week's agenda
+//   2. Needs your vote — the full inbox of every event awaiting my vote (always
+//      shown; an in-week one also appears under This Week as its agenda entry)
 //   3. Coming up later — confirmed plans beyond this week
 
 import Link from 'next/link'
@@ -43,11 +43,12 @@ export default function Home() {
     .map((event) => ({ event, date: earliestInWeekDate(event, today, weekEnd) }))
     .filter((entry): entry is { event: EnrichedEvent; date: string } => entry.date !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
-  const weekAheadIds = new Set(weekAhead.map((entry) => entry.event.id))
 
-  // Votable events that aren't already surfaced in This Week above.
+  // The full voting inbox — every event awaiting my vote. An in-week one also
+  // appears under This Week above (as its agenda entry); the vote action lives
+  // here so there's a single, dependable place to clear pending votes.
   const needsVote = events
-    .filter((event) => event.needsMyVote && !weekAheadIds.has(event.id))
+    .filter((event) => event.needsMyVote)
     .sort((a, b) => (a.topDate ?? '9999-12-31').localeCompare(b.topDate ?? '9999-12-31'))
 
   // Confirmed plans further out than this week.
@@ -81,16 +82,21 @@ export default function Home() {
             )}
           </section>
 
-          {needsVote.length > 0 && (
-            <section className="mt-7">
-              <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
+          <section className="mt-7">
+            <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
+            {needsVote.length > 0 ? (
               <div className="flex flex-col gap-2.5">
                 {needsVote.map((event) => (
                   <NeedsVoteCard key={event.id} event={event} />
                 ))}
               </div>
-            </section>
-          )}
+            ) : (
+              <Card className="py-6 text-center">
+                <p className="text-sm font-semibold text-ink">You&apos;re all caught up</p>
+                <p className="mt-1 text-sm text-ink-soft">No events need your vote right now.</p>
+              </Card>
+            )}
+          </section>
 
           {comingUpLater.length > 0 && (
             <section className="mt-7 mb-4">
@@ -153,14 +159,7 @@ function WeekAheadCard({ event, date }: { event: EnrichedEvent; date: string }) 
           <p className="truncate font-semibold text-ink">{event.title}</p>
           <p className="mt-0.5 text-xs text-ink-soft">{formatDateRangeShort(date, endDate)}</p>
         </div>
-        {event.needsMyVote ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-terracotta px-3 py-1.5 text-xs font-bold text-white">
-            Vote
-            <Icon name="arrowRight" size={13} />
-          </span>
-        ) : (
-          <Icon name="chevronRight" size={18} className="text-ink-faint" />
-        )}
+        <Icon name="chevronRight" size={18} className="text-ink-faint" />
       </Card>
     </Link>
   )
