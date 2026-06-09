@@ -68,7 +68,7 @@ export default function BottomNav() {
             <p className="text-xs font-semibold text-ink-mute uppercase tracking-widest mb-3">What do you want to add?</p>
             <div className="flex flex-col gap-2.5">
               {[
-                { label: 'Plan this week', sub: 'Find the best night for a casual hang', href: '/this-week?new=1', tint: 'bg-teal-tint text-teal' },
+                { label: 'Plan this week', sub: 'Find the best night for a casual hang', href: '/this-week', tint: 'bg-teal-tint text-teal' },
                 { label: 'New event', sub: 'Propose a plan & gather votes', href: '/events', tint: 'bg-terracotta-tint text-terracotta' },
                 { label: 'New idea',  sub: 'Throw something out for the group', href: '/ideas', tint: 'bg-amber-tint text-amber' },
                 { label: 'Time block', sub: 'Mark dates you can’t make it', href: '/availability', tint: 'bg-olive-tint text-olive' },
