@@ -1,17 +1,19 @@
 'use client'
 
-// Home — lean. The bottom nav + FAB handle navigation. Two sections:
-//   1. Needs your vote — a live "inbox" of every event awaiting my vote
-//   2. Upcoming — a strip of confirmed plans (this week and beyond)
-//
-// The casual "This Week" planner is intentionally NOT featured here for now —
-// it's still reachable from the + menu ("Plan this week").
+// Home — three sections, no casual "This Week" voting card (that's been pulled
+// off home while it's refined; it still lives on the + menu):
+//   1. This Week — any event with a date (confirmed OR a proposed option still
+//      being voted on) landing this calendar week
+//   2. Needs your vote — votable events whose dates are NOT this week (the
+//      in-week ones already show above, with a Vote button)
+//   3. Coming up later — confirmed plans beyond this week
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useName } from '@/lib/useName'
 import { categoryFor } from '@/lib/categories'
 import { loadPlanData, type EnrichedEvent, type PlanData, formatDateRangeShort, todayISO } from '@/lib/planData'
+import { weekStartFor, weekDays } from '@/lib/weeklyPlans'
 import PageHeader from './components/PageHeader'
 import Card from './components/Card'
 import IconTile from './components/IconTile'
@@ -34,18 +36,23 @@ export default function Home() {
 
   const events = data?.events ?? []
   const today = todayISO()
+  const weekEnd = weekDays(weekStartFor(today))[6]
 
-  // Everything awaiting my vote — the home "inbox".
-  const needsVote = [...events]
-    .filter((event) => event.needsMyVote)
+  // Anything with a date — confirmed or a proposed option — landing this week.
+  const weekAhead = events
+    .map((event) => ({ event, date: earliestInWeekDate(event, today, weekEnd) }))
+    .filter((entry): entry is { event: EnrichedEvent; date: string } => entry.date !== null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const weekAheadIds = new Set(weekAhead.map((entry) => entry.event.id))
+
+  // Votable events that aren't already surfaced in This Week above.
+  const needsVote = events
+    .filter((event) => event.needsMyVote && !weekAheadIds.has(event.id))
     .sort((a, b) => (a.topDate ?? '9999-12-31').localeCompare(b.topDate ?? '9999-12-31'))
 
-  // Confirmed plans from today onward (this week + later), soonest first.
-  const upcoming = [...events]
-    .filter(
-      (event) =>
-        event.displayStatus === 'confirmed' && event.topDate && (event.topEndDate ?? event.topDate) >= today,
-    )
+  // Confirmed plans further out than this week.
+  const comingUpLater = events
+    .filter((event) => event.displayStatus === 'confirmed' && event.topDate && event.topDate > weekEnd)
     .sort((a, b) => (a.topDate ?? '').localeCompare(b.topDate ?? ''))
 
   return (
@@ -57,27 +64,40 @@ export default function Home() {
       ) : (
         <>
           <section>
-            <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
-            {needsVote.length > 0 ? (
+            <SectionHeader title="This Week" href="/events" linkLabel="See all" />
+            {weekAhead.length > 0 ? (
+              <div className="flex flex-col gap-2.5">
+                {weekAhead.map(({ event, date }) => (
+                  <WeekAheadCard key={event.id} event={event} date={date} />
+                ))}
+              </div>
+            ) : (
+              <Card className="py-6 text-center">
+                <p className="text-sm font-semibold text-ink">Nothing on the calendar this week yet</p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Propose dates in <Link href="/events" className="font-semibold text-olive">Events</Link> to get one going.
+                </p>
+              </Card>
+            )}
+          </section>
+
+          {needsVote.length > 0 && (
+            <section className="mt-7">
+              <SectionHeader title="Needs your vote" href="/events" linkLabel="See all" />
               <div className="flex flex-col gap-2.5">
                 {needsVote.map((event) => (
                   <NeedsVoteCard key={event.id} event={event} />
                 ))}
               </div>
-            ) : (
-              <Card className="py-6 text-center">
-                <p className="text-sm font-semibold text-ink">You&apos;re all caught up</p>
-                <p className="mt-1 text-sm text-ink-soft">No events need your vote right now.</p>
-              </Card>
-            )}
-          </section>
+            </section>
+          )}
 
-          {upcoming.length > 0 && (
+          {comingUpLater.length > 0 && (
             <section className="mt-7 mb-4">
-              <SectionHeader title="Upcoming" href="/calendar" linkLabel="Calendar" />
+              <SectionHeader title="Coming up later" href="/calendar" linkLabel="Calendar" />
               <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-5 px-5 pb-1">
-                {upcoming.map((event) => (
-                  <UpcomingCard key={event.id} event={event} />
+                {comingUpLater.map((event) => (
+                  <ComingUpLaterCard key={event.id} event={event} />
                 ))}
               </div>
             </section>
@@ -88,15 +108,61 @@ export default function Home() {
   )
 }
 
+// Earliest date this event has landing within [today, weekEnd] — the confirmed
+// date if confirmed, otherwise any proposed option still up for a vote. Returns
+// null when the event has no date touching this week.
+function earliestInWeekDate(event: EnrichedEvent, today: string, weekEnd: string): string | null {
+  let best: string | null = null
+  const consider = (start?: string | null, end?: string | null) => {
+    if (!start) return
+    const last = end ?? start
+    if (start <= weekEnd && last >= today && (best === null || start < best)) best = start
+  }
+  if (event.displayStatus === 'confirmed') {
+    consider(event.topDate, event.topEndDate)
+  } else {
+    for (const option of event.dateOptions) consider(option.date, option.end_date ?? null)
+  }
+  return best
+}
+
 function HomeSkeleton() {
   return (
     <div className="mt-4 flex flex-col gap-3 animate-pulse">
-      <div className="h-5 w-32 rounded-full bg-cream" />
+      <div className="h-5 w-24 rounded-full bg-cream" />
       <div className="h-20 rounded-[var(--radius-lg)] bg-cream" />
       <div className="h-20 rounded-[var(--radius-lg)] bg-cream" />
-      <div className="mt-4 h-5 w-24 rounded-full bg-cream" />
+      <div className="mt-4 h-5 w-28 rounded-full bg-cream" />
       <div className="h-28 rounded-[var(--radius-lg)] bg-cream" />
     </div>
+  )
+}
+
+function WeekAheadCard({ event, date }: { event: EnrichedEvent; date: string }) {
+  const category = categoryFor(event.title)
+  // Show the full range only for confirmed events; voting options show their day.
+  const endDate = event.displayStatus === 'confirmed' ? event.topEndDate : null
+  return (
+    <Link href={`/events/${event.id}`}>
+      <Card className="flex items-center gap-3">
+        <IconTile name={category.iconName} tint={category.tint} size={48} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5">
+            <StatusChip status={event.displayStatus} size="xs" />
+          </div>
+          <p className="truncate font-semibold text-ink">{event.title}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">{formatDateRangeShort(date, endDate)}</p>
+        </div>
+        {event.needsMyVote ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-terracotta px-3 py-1.5 text-xs font-bold text-white">
+            Vote
+            <Icon name="arrowRight" size={13} />
+          </span>
+        ) : (
+          <Icon name="chevronRight" size={18} className="text-ink-faint" />
+        )}
+      </Card>
+    </Link>
   )
 }
 
@@ -126,7 +192,7 @@ function NeedsVoteCard({ event }: { event: EnrichedEvent }) {
   )
 }
 
-function UpcomingCard({ event }: { event: EnrichedEvent }) {
+function ComingUpLaterCard({ event }: { event: EnrichedEvent }) {
   const category = categoryFor(event.title)
   return (
     <Link href={`/events/${event.id}`} className="min-w-[158px] max-w-[158px] shrink-0">
