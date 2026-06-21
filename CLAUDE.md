@@ -6,8 +6,8 @@
 ## What the app is
 
 A lightweight web app for ~12 friends to coordinate summer plans — availability blackouts,
-event date voting, shared idea hub. Mobile-first. The anchor event is **Bald Head Island,
-Aug 1–8 2026**. Everything before that is a dress rehearsal for that week actually happening.
+event date voting, shared idea hub. Mobile-first. No external deadline — ship working
+increments the friend group can actually use.
 
 ## Core rule
 
@@ -71,41 +71,48 @@ Works voters). Do not fold a weekly plan into the events table until the user ta
 
 ## The PM system (read this before wandering)
 
-Three surfaces, each doing one job:
+Everything lives in the repo — no external tools. Three surfaces, each doing one job:
 
-1. **Notion Mission Control** — live project state, next-3 priorities, session log, roadmap,
-   parking lot, decisions. The one page that tells you where we are.
+1. **`docs/` folder** — live project state. `mission-control.md` (Top 3 Next Up + session
+   log + migrations), `roadmap.md` (shipped / next up / someday), `parking-lot.md` (ideas
+   we like but aren't doing), `decisions.md` (the *why* behind architectural choices).
 2. **GitHub Issues** — the to-do list. Each Issue has enough context to ship from cold.
 3. **This file (`CLAUDE.md`)** — the brief you're reading. How the app works, what rules apply.
+
+> Notion was retired 2026-06-20 — it drifted ~6 weeks stale because it lived outside the
+> commit flow. The repo is now the single source of truth. (See the 2026-04-23 PM-system
+> entry in `docs/decisions.md` for the why.)
 
 ## Session ritual
 
 ### When a session starts
 
 1. Read this file (you already are).
-2. Open the Notion Mission Control page — read **Top 3 Next Up** and **Latest Session**.
-3. If we're about to touch architecture, skim **Journey & Decisions** first.
+2. Open `docs/mission-control.md` — read **Top 3 Next Up** and the latest **Session log** entry.
+3. If we're about to touch architecture, skim `docs/decisions.md` first.
 4. Confirm with Tad what we're doing this session before writing code.
 
 ### When a session ends
 
-1. Update **Latest Session** on Mission Control (Shipped / Learned / Decided — 3 bullets each).
-2. Move any Roadmap cards whose status changed.
-3. If we made an architectural choice, add an entry to **Journey & Decisions** using the
-   template in that page (Choice / Alternatives / Why / Trade-offs / Revisit if).
+1. Add a new **Session log** entry in `docs/mission-control.md` (Shipped / Learned / Decided
+   — 3 bullets each).
+2. Update statuses in `docs/roadmap.md` for anything that moved.
+3. If we made an architectural choice, add an entry to `docs/decisions.md` using the template
+   at the top of that file (Choice / Alternatives / Why / Trade-offs / Revisit if).
 4. Update **Top 3 Next Up** if priorities shifted.
 5. Commit & push — `main` must reflect reality.
 
 ## How to add a Roadmap item
 
-Fields: Item, Status (Shipped / In Progress / Next Up / Someday), Area (Home / Events /
-Availability / Ideas / Me / Calendar / Design System / Infra / Data), Effort (XS–XL),
-Why it matters (one line), GitHub Issue URL, Shipped On.
+In `docs/roadmap.md`, add a row under the right status table: Item, Area (Home / Events /
+Availability / Ideas / Me / Calendar / Design System / Infra / Data), Effort (XS–XL), Why it
+matters (one line), and optional GitHub Issue link. When it ships, move it to **Shipped** with
+a date.
 
 ## How to add a Parking Lot item
 
-Fields: Idea, Why parked, Tag (Feature / Polish / Refactor / Moonshot / Maybe never),
-Captured (date).
+In `docs/parking-lot.md`, add a row: Idea, Tag (Feature / Polish / Refactor / Moonshot /
+Maybe never), Why parked, Captured (date).
 
 Revisit the parking lot at session start, not mid-build.
 
@@ -128,5 +135,5 @@ Revisit the parking lot at session start, not mid-build.
 
 ## Current status
 
-_Latest session summary lives on the Notion Mission Control page — keep it there, not here.
-This file stays stable; Mission Control is the living surface._
+_Latest session summary lives in `docs/mission-control.md` — keep it there, not here.
+This file stays stable; `docs/mission-control.md` is the living surface._

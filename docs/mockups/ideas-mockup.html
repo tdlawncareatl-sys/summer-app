@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ideas — redesign mockup</title>
+<style>
+  :root {
+    --sand:#FCFAF6; --cream:#FFFDFC; --stone:#EAE2D5; --sand-alt:#F5EEE4;
+    --ink:#2A2923; --ink-soft:#656359; --ink-mute:#A39D90; --ink-faint:#D3CDC2;
+    --olive:#6B7F3F; --olive-soft:#E6E8CF; --olive-tint:#F3F5E7;
+    --terracotta:#C56A3E; --terracotta-tint:#FBEEE3;
+    --teal:#6B8E8C; --teal-tint:#E8EFEE;
+    --lavender:#9B92B0; --lavender-tint:#EEEBF1;
+    --amber:#C8943A; --amber-tint:#F9EFD6;
+    --blush:#B8766F; --blush-tint:#F2E0DC;
+    --sage:#8AA382; --sage-tint:#E8EEE3;
+    --shadow-soft: 0 1px 3px rgba(42,41,35,0.04), 0 1px 2px rgba(42,41,35,0.06);
+    --shadow-raised: 0 4px 12px rgba(42,41,35,0.08);
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background:var(--sand);
+    color:var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height:1.5;
+    padding: 32px 12px 80px;
+  }
+  .wrap {
+    display:flex; flex-direction:column; gap:48px;
+    max-width: 880px; margin: 0 auto;
+  }
+  .phone {
+    width:393px;
+    background:var(--sand);
+    border:1px solid var(--stone);
+    border-radius:36px;
+    overflow:hidden;
+    box-shadow: var(--shadow-raised);
+    margin: 0 auto;
+  }
+  .phone-title {
+    text-align:center;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    margin-bottom:10px;
+  }
+  .frame {
+    padding: 20px;
+  }
+  /* Header */
+  .header {
+    display:flex; justify-content:space-between; align-items:flex-start;
+    margin-bottom:14px;
+  }
+  .h-title { font-size:28px; font-weight:800; letter-spacing:-0.01em; line-height:1.1; }
+  .h-sub   { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .add-btn {
+    background:var(--olive); color:#fff; font-weight:600; font-size:13px;
+    padding:10px 16px; border-radius:14px; border:0;
+    box-shadow: var(--shadow-soft);
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .add-btn svg { width:14px; height:14px; }
+  /* View toggle */
+  .toggle {
+    display:inline-flex; background:var(--stone); border-radius:999px; padding:3px;
+    font-size:12px; font-weight:600;
+  }
+  .toggle button {
+    border:0; background:transparent; padding:6px 14px; border-radius:999px;
+    color:var(--ink-soft); cursor:pointer;
+  }
+  .toggle .active { background:var(--cream); color:var(--ink); box-shadow:var(--shadow-soft); }
+  /* Needs your take prompt */
+  .nudge {
+    margin-top:14px;
+    background:var(--olive-tint);
+    border-radius:18px;
+    padding:14px 16px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .nudge .lab { font-size:13px; font-weight:600; color:var(--olive); }
+  .nudge .sub { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .nudge .arrow { color:var(--olive); font-weight:700; }
+  /* Sort */
+  .sort-row {
+    display:flex; justify-content:space-between; align-items:flex-end;
+    margin-top:24px; margin-bottom:10px;
+  }
+  .sort-row h2 { font-size:18px; font-weight:700; margin:0; }
+  .sort-row .sub { font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .sort-pills { display:flex; gap:6px; font-size:11px; font-weight:600; }
+  .sort-pills span { padding:5px 10px; border-radius:999px; color:var(--ink-mute); cursor:pointer; }
+  .sort-pills .active { background:var(--olive-tint); color:var(--olive); }
+  /* Idea card */
+  .idea {
+    background:var(--cream); border-radius:18px; padding:14px;
+    box-shadow:var(--shadow-soft); margin-bottom:10px;
+  }
+  .idea-top { display:flex; gap:12px; align-items:flex-start; }
+  .icon-tile {
+    flex-shrink:0; width:54px; height:54px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px;
+  }
+  .it-sage { background:var(--sage-tint); color:var(--sage); }
+  .it-amber { background:var(--amber-tint); color:var(--amber); }
+  .it-terracotta { background:var(--terracotta-tint); color:var(--terracotta); }
+  .it-lavender { background:var(--lavender-tint); color:var(--lavender); }
+  .it-teal { background:var(--teal-tint); color:var(--teal); }
+  .it-olive { background:var(--olive-tint); color:var(--olive); }
+  .it-blush { background:var(--blush-tint); color:var(--blush); }
+  .idea-body { flex:1; min-width:0; }
+  .idea-title { font-size:17px; font-weight:700; line-height:1.2; }
+  .idea-byline { font-size:11px; color:var(--ink-mute); margin-top:3px; }
+  .supporters {
+    display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:var(--ink-soft);
+  }
+  .avatars { display:flex; }
+  .avatar {
+    width:22px; height:22px; border-radius:50%; border:2px solid var(--cream);
+    margin-left:-6px; display:flex; align-items:center; justify-content:center;
+    font-size:9px; font-weight:700; color:#fff;
+  }
+  .avatar:first-child { margin-left:0; }
+  .av-1 { background:var(--olive); }
+  .av-2 { background:var(--terracotta); }
+  .av-3 { background:var(--teal); }
+  .av-4 { background:var(--lavender); }
+  .av-5 { background:var(--amber); }
+  .actions {
+    display:flex; gap:8px; margin-top:12px; align-items:center;
+  }
+  .im-in {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:14px; font-weight:600; font-size:13px;
+    border:1.5px solid var(--olive); background:transparent; color:var(--olive);
+    cursor:pointer; transition: all 120ms;
+  }
+  .im-in.active { background:var(--olive); color:#fff; border-color:var(--olive); }
+  .im-in svg { width:13px; height:13px; }
+  .plan-btn {
+    margin-left:auto;
+    background:var(--olive); color:#fff;
+    padding:8px 14px; border-radius:14px;
+    font-weight:600; font-size:12px; border:0;
+    display:inline-flex; align-items:center; gap:5px;
+  }
+  .plan-btn.dim { background:transparent; color:var(--ink-mute); }
+  .plan-btn svg { width:11px; height:11px; }
+  /* Board view */
+  .lanes {
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .lane {
+    background:var(--cream); border-radius:18px; padding:14px;
+    box-shadow:var(--shadow-soft);
+  }
+  .lane-head {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:8px;
+  }
+  .lane-title { font-size:12px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; }
+  .lane-count { font-size:11px; color:var(--ink-mute); }
+  .lane.buzzing .lane-title { color:var(--olive); }
+  .lane.radar .lane-title { color:var(--amber); }
+  .lane.quiet .lane-title { color:var(--ink-mute); }
+  .lane-item {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 0; border-top:1px solid var(--stone);
+  }
+  .lane-item:first-of-type { border-top:0; }
+  .lane-mini {
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+  }
+  .lane-text { flex:1; min-width:0; }
+  .lane-name { font-size:13px; font-weight:600; line-height:1.2; }
+  .lane-meta { font-size:11px; color:var(--ink-mute); margin-top:1px; }
+  .check { color:#fff; }
+  /* annotations */
+  .anno {
+    color:var(--ink-mute); font-size:11px; margin-top:8px;
+    font-style:italic; text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ─────────── LIST VIEW ─────────── -->
+<section>
+<div class="phone-title">List view — default</div>
+<div class="phone"><div class="frame">
+
+  <div class="header">
+    <div>
+      <div class="h-title">Ideas</div>
+      <div class="h-sub">Capture and plan what to do next.</div>
+    </div>
+    <button class="add-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+  </div>
+
+  <div class="toggle">
+    <button class="active">List</button>
+    <button>Board</button>
+  </div>
+
+  <div class="nudge">
+    <div>
+      <div class="lab">8 ideas need your take</div>
+      <div class="sub">Tap to filter to just those.</div>
+    </div>
+    <div class="arrow">→</div>
+  </div>
+
+  <div class="sort-row">
+    <div>
+      <h2>All ideas</h2>
+      <div class="sub">16 ideas, all visible</div>
+    </div>
+    <div class="sort-pills">
+      <span class="active">Hot</span>
+      <span>New</span>
+      <span>Mine</span>
+    </div>
+  </div>
+
+  <!-- Idea: Road trip — top, you're in -->
+  <div class="idea">
+    <div class="idea-top">
+      <div class="icon-tile it-sage">🚗</div>
+      <div class="idea-body">
+        <div class="idea-title">Road trip</div>
+        <div class="idea-byline">Suggested by Tad Dicks</div>
+        <div class="supporters">
+          <div class="avatars">
+            <div class="avatar av-1">T</div>
+            <div class="avatar av-2">S</div>
+            <div class="avatar av-3">G</div>
+            <div class="avatar av-4">L</div>
+            <div class="avatar av-5">C</div>
+          </div>
+          <span>5 in · You, Storm, Grace, Liam, Carter</span>
+        </div>
+        <div class="actions">
+          <button class="im-in active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+            You're in
+          </button>
+          <button class="plan-btn">Plan it →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Idea: Family feud — no reaction from you -->
+  <div class="idea">
+    <div class="idea-top">
+      <div class="icon-tile it-amber">💡</div>
+      <div class="idea-body">
+        <div class="idea-title">Family feud</div>
+        <div class="idea-byline">Suggested by Tad Dicks</div>
+        <div class="supporters">
+          <div class="avatars">
+            <div class="avatar av-2">M</div>
+            <div class="avatar av-3">J</div>
+            <div class="avatar av-4">K</div>
+          </div>
+          <span>3 in · Megan, Jonah, Katie</span>
+        </div>
+        <div class="actions">
+          <button class="im-in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+            I'm in
+          </button>
+          <button class="plan-btn">Plan it →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Idea: Karaoke — 1 in -->
+  <div class="idea">
+    <div class="idea-top">
+      <div class="icon-tile it-terracotta">🎤</div>
+      <div class="idea-body">
+        <div class="idea-title">Karaoke ✨</div>
+        <div class="idea-byline">Suggested by Grace Brennan</div>
+        <div class="supporters">
+          <div class="avatars">
+            <div class="avatar av-3">G</div>
+          </div>
+          <span>1 in · Grace</span>
+        </div>
+        <div class="actions">
+          <button class="im-in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+            I'm in
+          </button>
+          <button class="plan-btn dim">Plan it →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Idea: Six Flags — 0 supporters -->
+  <div class="idea">
+    <div class="idea-top">
+      <div class="icon-tile it-lavender">🎢</div>
+      <div class="idea-body">
+        <div class="idea-title">Six Flags</div>
+        <div class="idea-byline">Suggested by Tad Dicks</div>
+        <div class="supporters">
+          <span style="color:var(--ink-mute)">Nobody's reacted yet — be the first</span>
+        </div>
+        <div class="actions">
+          <button class="im-in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+            I'm in
+          </button>
+          <button class="plan-btn dim">Plan it →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Idea: Skydiving — 0 supporters -->
+  <div class="idea">
+    <div class="idea-top">
+      <div class="icon-tile it-teal">🪂</div>
+      <div class="idea-body">
+        <div class="idea-title">Skydiving</div>
+        <div class="idea-byline">Suggested by Tad Dicks</div>
+        <div class="supporters">
+          <span style="color:var(--ink-mute)">Nobody's reacted yet — be the first</span>
+        </div>
+        <div class="actions">
+          <button class="im-in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
+            I'm in
+          </button>
+          <button class="plan-btn dim">Plan it →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="anno">…11 more ideas scroll below. Nothing hidden.</div>
+</div></div>
+</section>
+
+<!-- ─────────── BOARD VIEW ─────────── -->
+<section>
+<div class="phone-title">Board view — toggled</div>
+<div class="phone"><div class="frame">
+
+  <div class="header">
+    <div>
+      <div class="h-title">Ideas</div>
+      <div class="h-sub">Capture and plan what to do next.</div>
+    </div>
+    <button class="add-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+  </div>
+
+  <div class="toggle">
+    <button>List</button>
+    <button class="active">Board</button>
+  </div>
+
+  <div class="nudge">
+    <div>
+      <div class="lab">8 ideas need your take</div>
+      <div class="sub">Tap to filter to just those.</div>
+    </div>
+    <div class="arrow">→</div>
+  </div>
+
+  <div class="lanes" style="margin-top:18px;">
+
+    <div class="lane buzzing">
+      <div class="lane-head">
+        <div class="lane-title">🔥 Buzzing</div>
+        <div class="lane-count">3 ideas · 3+ in</div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-sage">🚗</div>
+        <div class="lane-text">
+          <div class="lane-name">Road trip</div>
+          <div class="lane-meta">5 in · You + 4</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-amber">💡</div>
+        <div class="lane-text">
+          <div class="lane-name">Family feud</div>
+          <div class="lane-meta">3 in · Megan, Jonah, Katie</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-amber">🌙</div>
+        <div class="lane-text">
+          <div class="lane-name">Family night</div>
+          <div class="lane-meta">3 in · Grace, Liam, Storm</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lane radar">
+      <div class="lane-head">
+        <div class="lane-title">📡 On the radar</div>
+        <div class="lane-count">5 ideas · 1–2 in</div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-lavender">🎃</div>
+        <div class="lane-text">
+          <div class="lane-name">Summerween</div>
+          <div class="lane-meta">2 in · Katie, Mary Hannah</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-olive">🔒</div>
+        <div class="lane-text">
+          <div class="lane-name">24 hour lock in</div>
+          <div class="lane-meta">1 in · Liam</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-terracotta">🎤</div>
+        <div class="lane-text">
+          <div class="lane-name">Karaoke ✨</div>
+          <div class="lane-meta">1 in · Grace</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-teal">🏊</div>
+        <div class="lane-text">
+          <div class="lane-name">Pool party</div>
+          <div class="lane-meta">1 in · Carter</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-amber">😂</div>
+        <div class="lane-text">
+          <div class="lane-name">Impractical Jokers</div>
+          <div class="lane-meta">1 in · Megan</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lane quiet">
+      <div class="lane-head">
+        <div class="lane-title">💤 Quiet</div>
+        <div class="lane-count">8 ideas · no reactions yet</div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-lavender">🎢</div>
+        <div class="lane-text">
+          <div class="lane-name">Six Flags</div>
+          <div class="lane-meta">Submitted by Tad Dicks</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-teal">🪂</div>
+        <div class="lane-text">
+          <div class="lane-name">Skydiving</div>
+          <div class="lane-meta">Submitted by Tad Dicks</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-lavender">🎬</div>
+        <div class="lane-text">
+          <div class="lane-name">Drive in movie</div>
+          <div class="lane-meta">Submitted by Tad Dicks</div>
+        </div>
+      </div>
+      <div class="lane-item">
+        <div class="lane-mini it-blush">🎰</div>
+        <div class="lane-text">
+          <div class="lane-name">Casino night</div>
+          <div class="lane-meta">Submitted by McGuire Herlihy</div>
+        </div>
+      </div>
+      <div class="anno" style="margin:8px 0 0;">…4 more in this lane.</div>
+    </div>
+
+  </div>
+</div></div>
+</section>
+
+</div>
+</body>
+</html>
