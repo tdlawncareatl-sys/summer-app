@@ -1060,10 +1060,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         {isConfirmed ? (
           <button
             type="button"
-            disabled={!isCreator || confirming}
+            disabled={confirming}
             onClick={() => void unconfirmEvent()}
             className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-olive px-4 py-3 text-sm font-bold text-white shadow-[var(--shadow-soft)] active:scale-[0.98] disabled:opacity-50"
-            title={isCreator ? undefined : 'Only the event creator can change the date'}
           >
             <Icon name="calendar" size={14} />
             {confirming ? 'Unlocking…' : 'Change date'}
@@ -1080,10 +1079,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         )}
         <button
           type="button"
-          disabled={!isCreator}
           onClick={startEditingDetails}
           className="flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded-[14px] bg-sand px-4 py-3 text-sm font-semibold text-ink-soft active:scale-[0.98] disabled:opacity-50"
-          title={isCreator ? undefined : 'Only the event creator can edit details'}
         >
           <Icon name="pencil" size={14} />
           Edit details
@@ -1114,8 +1111,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           icon={<Icon name="mapPin" size={14} />}
           label="Where"
           value={placeFullLabel}
-          onTap={isCreator ? startEditingDetails : undefined}
-          editable={isCreator}
+          onTap={startEditingDetails}
+          editable
           muted={!event.location_address?.trim() && !event.location_name?.trim()}
         />
         <DetailRow
@@ -1123,15 +1120,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           label="Length"
           value={lengthLabel(lengthType)}
           chip
-          onTap={() => isCreator && setEditingLength(true)}
-          editable={isCreator}
+          onTap={() => setEditingLength(true)}
+          editable
         />
         <DetailRow
           icon={<Icon name="note" size={14} />}
           label="Notes"
           value={notesLabel}
-          onTap={isCreator ? startEditingDetails : undefined}
-          editable={isCreator}
+          onTap={startEditingDetails}
+          editable
           muted={notesIsPlaceholder}
           last
         />
@@ -1157,16 +1154,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 <p className="mt-1 text-sm leading-6 text-ink-soft">{headerAddressLine ?? placeFullLabel}</p>
               ) : null}
             </div>
-            {isCreator ? (
-              <button
-                type="button"
-                onClick={startEditingDetails}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
-                aria-label="Edit location details"
-              >
-                <Icon name="pencil" size={14} />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={startEditingDetails}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sand text-ink-soft"
+              aria-label="Edit location details"
+            >
+              <Icon name="pencil" size={14} />
+            </button>
           </div>
           {(mapUrl || copyableLocation) ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1223,16 +1218,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   {formatRange(event.confirmed_date, event.confirmed_end_date)}
                 </p>
               </div>
-              {isCreator ? (
-                <button
-                  type="button"
-                  onClick={() => void unconfirmEvent()}
-                  disabled={confirming}
-                  className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-white/25 active:scale-[0.98] disabled:opacity-50"
-                >
-                  {confirming ? '…' : 'Change date'}
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => void unconfirmEvent()}
+                disabled={confirming}
+                className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-white/25 active:scale-[0.98] disabled:opacity-50"
+              >
+                {confirming ? '…' : 'Change date'}
+              </button>
             </div>
             {(() => {
               const score = scoreRange(event.confirmed_date, event.confirmed_end_date ?? event.confirmed_date, participants, availability)
@@ -1690,14 +1683,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 onClick={() => void copyLocation()}
               />
             ) : null}
-            {isCreator ? (
-              <SheetAction
-                icon={<Icon name="pencil" size={14} />}
-                title="Edit details"
-                description="Update the name, summary, location, or notes."
-                onClick={startEditingDetails}
-              />
-            ) : null}
+            <SheetAction
+              icon={<Icon name="pencil" size={14} />}
+              title="Edit details"
+              description="Update the name, summary, location, or notes."
+              onClick={startEditingDetails}
+            />
             {isCreator ? (
               <SheetAction
                 icon={<Icon name="x" size={14} />}
