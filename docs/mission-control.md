@@ -52,8 +52,9 @@ _Newest first. Shipped / Learned / Decided — 3 bullets max each._
 - `lib/schoolCalendars.ts` — registrar-verified 2026–27 term data + pure
   expansion logic; rows are tagged `School · <name>` so re-import/clear is one
   action and manual blocks are never touched (no schema change needed)
-- 30 new tests (data sanity + segment logic + sheet component flow);
-  `findBestRanges` horizon 90 → 180 days for winter-party planning
+- My Blocks are now editable: tap a block to move/shrink/expand its dates or
+  relabel it (EditBlockSheet + pure diff in `lib/blockEdits.ts`); also bumped
+  `findBestRanges` horizon 90 → 180 days; 41 new tests across the session
 
 **Learned:**
 - Academic calendars differ enough to matter (UGA takes the whole Thanksgiving

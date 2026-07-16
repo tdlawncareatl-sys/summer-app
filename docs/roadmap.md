@@ -30,6 +30,7 @@ _(none)_
 | Item | Area | Effort | Shipped | Why it matters |
 |---|---|---|---|---|
 | School schedule import (year-round availability) | Availability | L | 2026-07-15 | One tap blocks a college semester and keeps breaks free — makes the app usable for Friendsgiving/Christmas planning, not just summer. |
+| Editable blocks in My Blocks | Availability | S | 2026-07-15 | Tap a block to adjust its dates or label instead of delete-and-redraw. |
 | This Week casual planning + Home voting inbox | Home | L | 2026-06-08 | Lightweight whole-week board with availability overlay; Home leads with This Week + "Needs your vote". |
 | Ideas as a database + idea detail + Wheel view | Ideas | L | 2026-05-22 | Grid + Wheel browsing and a real detail page; post-confirmation attendance. |
 | App icon full-bleed cleanup | Design System | XS | 2026-05-12 | Home-screen icon uses the supplied artwork without the distracting white side matte. |

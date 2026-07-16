@@ -18,7 +18,9 @@ import Card from '../components/Card'
 import Icon from '../components/Icon'
 import { conflictingDatesForOptions, densityForDay } from '@/lib/availability'
 import SchoolScheduleSheet from '../components/SchoolScheduleSheet'
+import EditBlockSheet, { BlockUpdate } from '../components/EditBlockSheet'
 import { School, isSchoolCategory, schoolCategoryLabel } from '@/lib/schoolCalendars'
+import { diffBlockEdit } from '@/lib/blockEdits'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_LABELS = ['S','M','T','W','T','F','S']
@@ -112,6 +114,7 @@ export default function AvailabilityPage() {
   const [eventConflicts, setEventConflicts] = useState<EventConflict[]>([])
   const [removingRange, setRemovingRange] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
+  const [editingRange, setEditingRange] = useState<DateRange | null>(null)
 
   const noticeTimer = useRef<number | null>(null)
 
@@ -391,6 +394,67 @@ export default function AvailabilityPage() {
     setClearingAll(false)
   }
 
+  // ─── block editing ───────────────────────────────────────────────────────
+  // Move/shrink/expand a range from My Blocks, or relabel it. The diff logic
+  // is pure (lib/blockEdits.ts); this handler owns the three writes it can
+  // produce: delete trimmed days, insert added days, relabel kept days.
+  async function saveBlockEdit(update: BlockUpdate) {
+    if (!userId || !editingRange) return
+    const original = editingRange
+    clearNotice()
+    try {
+      const blockedElsewhere = new Set([...blackouts].filter((d) => !original.days.includes(d)))
+      const { toRemove, toKeep, toInsert } = diffBlockEdit({
+        originalDays: original.days,
+        newStart: update.start,
+        newEnd: update.end,
+        todayISO,
+        blockedElsewhere,
+      })
+      const categoryChanged = update.category !== (original.category ?? null)
+
+      if (toRemove.length) {
+        const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', toRemove)
+        if (error) throw error
+      }
+      if (toInsert.length) {
+        const { error } = await supabase
+          .from('availability')
+          .insert(toInsert.map((date) => ({ user_id: userId, date, category: update.category })))
+        if (error) throw error
+      }
+      if (categoryChanged && toKeep.length) {
+        const { error } = await supabase
+          .from('availability')
+          .update({ category: update.category })
+          .eq('user_id', userId)
+          .in('date', toKeep)
+        if (error) throw error
+      }
+
+      const newBlackouts = new Set(blackouts)
+      toRemove.forEach((d) => newBlackouts.delete(d))
+      toInsert.forEach((d) => newBlackouts.add(d))
+      setBlackouts(newBlackouts)
+      const touched = new Set([...toRemove, ...toKeep, ...toInsert])
+      setBlackoutRecords((prev) => [
+        ...prev.filter((r) => !touched.has(r.date)),
+        ...[...toKeep, ...toInsert].map((date) => ({ date, category: update.category })),
+      ])
+      setEditingRange(null)
+      showNotice('Block updated.', 'success')
+    } catch (error) {
+      console.error('availability.saveBlockEdit', error)
+      showNotice(extractErrorMessage(error, 'Could not update that block.'), 'error')
+    }
+  }
+
+  async function removeEditingBlock() {
+    if (!editingRange) return
+    await removeRange(editingRange)
+    setEditingRange(null)
+  }
+
   // ─── school schedule import ──────────────────────────────────────────────
   // The sheet picks the days; this page owns the writes. Applying replaces any
   // earlier school-tagged rows (so re-importing or switching schools is safe)
@@ -499,6 +563,17 @@ export default function AvailabilityPage() {
           : 'When the crew is collectively blocked.'
         }
       />
+
+      {/* Edit block bottom sheet */}
+      {editingRange && (
+        <EditBlockSheet
+          block={editingRange}
+          todayISO={todayISO}
+          onSave={saveBlockEdit}
+          onRemove={removeEditingBlock}
+          onClose={() => setEditingRange(null)}
+        />
+      )}
 
       {/* School schedule bottom sheet */}
       {schoolSheetOpen && (
@@ -761,7 +836,11 @@ export default function AvailabilityPage() {
                     const sub = isSingleDay ? null : `${range.days.length} days`
                     return (
                       <Card key={range.start} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRange(range)}
+                          className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-xl -m-1 p-1 hover:bg-sand transition-colors"
+                        >
                           <span className="w-2.5 h-2.5 rounded-full bg-blush shrink-0" />
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-ink truncate">{label}</p>
@@ -772,7 +851,7 @@ export default function AvailabilityPage() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </button>
                         <button type="button"
                           onClick={() => removeRange(range)}
                           disabled={removingRange === range.start}
@@ -783,6 +862,9 @@ export default function AvailabilityPage() {
                       </Card>
                     )
                   })}
+                  <p className="text-xs text-ink-mute text-center mt-1">
+                    Tap a block to edit its dates or label
+                  </p>
                 </div>
               )}
             </div>
