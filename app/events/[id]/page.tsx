@@ -153,6 +153,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [savingDetails, setSavingDetails] = useState(false)
   const [savingLength, setSavingLength] = useState(false)
   const [deletingEvent, setDeletingEvent] = useState(false)
+  // Two-tap delete: the first tap swaps the sheet action for an explicit
+  // confirm/cancel block, so nobody nukes an event from a stray thumb.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const [editingDetails, setEditingDetails] = useState(false)
   const [editingLength, setEditingLength] = useState(false)
@@ -284,7 +287,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const lengthType: LengthType = normalizeLengthType(event?.length_days)
   const isConfirmed = event?.status === 'confirmed'
-  const isCreator = !!name && !!event?.created_by && event.created_by === name
 
   const bestRanges: ScoredRange[] = useMemo(() => {
     if (!participants.length) return []
@@ -824,19 +826,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  // Anyone can delete (12-friend trust model, same reasoning as unconfirm and
+  // edit-details). The safety net is the in-sheet confirm step, not a role gate.
   async function deleteEvent() {
-    if (!event || !isCreator || deletingEvent) return
-    if (typeof window !== 'undefined') {
-      const shouldDelete = window.confirm(
-        `Delete ${event.title}? This will remove its proposed dates, votes, and related updates.`,
-      )
-      if (!shouldDelete) return
-    }
+    if (!event || deletingEvent) return
 
     setDeletingEvent(true)
     setDetailMessage(null)
     setDetailError(null)
     setShowOptions(false)
+    setConfirmingDelete(false)
 
     const { error } = await supabase.from('events').delete().eq('id', event.id)
 
@@ -1650,7 +1649,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       </footer>
 
       {showOptions ? (
-        <Sheet onClose={() => setShowOptions(false)} title="Event options">
+        <Sheet onClose={() => { setShowOptions(false); setConfirmingDelete(false) }} title="Event options">
           <div className="flex flex-col gap-2">
             <SheetAction
               icon={<Icon name="share" size={14} />}
@@ -1689,16 +1688,41 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               description="Update the name, summary, location, or notes."
               onClick={startEditingDetails}
             />
-            {isCreator ? (
+            {!confirmingDelete ? (
               <SheetAction
                 icon={<Icon name="x" size={14} />}
                 title={deletingEvent ? 'Deleting event…' : 'Delete event'}
                 description="Remove this event and its vote history."
-                onClick={() => void deleteEvent()}
+                onClick={() => setConfirmingDelete(true)}
                 tone="danger"
                 disabled={deletingEvent}
               />
-            ) : null}
+            ) : (
+              <div className="rounded-[16px] bg-blush-soft px-4 py-3">
+                <p className="text-sm font-semibold text-blush">Delete {event.title}?</p>
+                <p className="mt-0.5 text-xs leading-5 text-ink-soft">
+                  This removes the event for everyone — proposed dates, votes, and updates included. It can&apos;t be undone.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deletingEvent}
+                    className="flex-1 rounded-xl bg-cream px-4 py-2.5 text-sm font-bold text-ink transition-all active:scale-95 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteEvent()}
+                    disabled={deletingEvent}
+                    className="flex-1 rounded-xl bg-blush px-4 py-2.5 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+                  >
+                    {deletingEvent ? 'Deleting…' : 'Yes, delete it'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Sheet>
       ) : null}

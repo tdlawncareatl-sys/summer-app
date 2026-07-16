@@ -53,8 +53,9 @@ _Newest first. Shipped / Learned / Decided — 3 bullets max each._
   expansion logic; rows are tagged `School · <name>` so re-import/clear is one
   action and manual blocks are never touched (no schema change needed)
 - My Blocks are now editable: tap a block to move/shrink/expand its dates or
-  relabel it (EditBlockSheet + pure diff in `lib/blockEdits.ts`); also bumped
-  `findBestRanges` horizon 90 → 180 days; 41 new tests across the session
+  relabel it (EditBlockSheet + pure diff in `lib/blockEdits.ts`); event delete
+  opened to everyone behind an in-sheet confirm/cancel (no more creator gate or
+  browser popup); `findBestRanges` horizon 90 → 180; 41 new tests
 
 **Learned:**
 - Academic calendars differ enough to matter (UGA takes the whole Thanksgiving

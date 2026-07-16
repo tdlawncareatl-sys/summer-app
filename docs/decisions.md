@@ -94,6 +94,10 @@ hit cleaning fake events out of live data.
 **Trade-offs:** Hard delete is irreversible for now, so the confirm step matters. It also
 doesn't solve "this should go back to idea status" yet; that's a separate follow-on.
 **Revisit if:** hosts start needing undo, archive/history, or a softer recovery path.
+_(Updated 2026-07-15: delete is no longer creator-only — anyone can delete, matching
+the trust-model direction of unconfirm/edit-details (#5). The native `window.confirm`
+was replaced by an in-sheet confirm/cancel step so the safety net matches the app's
+design instead of a browser popup.)_
 
 ---
 
