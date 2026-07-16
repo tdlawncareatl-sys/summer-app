@@ -30,9 +30,9 @@ _Live list. Keep it at 3. Anything beyond 3 goes in [roadmap.md](./roadmap.md) o
 [parking-lot.md](./parking-lot.md)._
 
 1. **Real-device pass on the School schedule flow** — run the import on iPhone as a
-   real user (away school + local KSU), confirm the review sheet feels right, then
-   have the away-at-college friends fill theirs in before fall semester starts (late
-   August). _(Only Tad can do this — needs a physical phone + the group.)_
+   real user, confirm the review sheet feels right, then have the college friends
+   fill theirs in before fall semester starts (late August). _(Only Tad can do
+   this — needs a physical phone + the group.)_
 2. **Real-device pass on the redesigned Me page + updated app icon** — verify the
    availability-first hierarchy lands on iPhone and the icon refreshes cleanly after
    reinstall. _(Only Tad can do this.)_
@@ -47,8 +47,8 @@ _Newest first. Shipped / Learned / Decided — 3 bullets max each._
 
 **Shipped:**
 - "School schedule" import on Availability: pick your college (KSU, Wheaton,
-  ASU, Hillsdale, Samford) → away-at-school or local → review the away/home
-  timeline → one tap blocks the semester, leaving breaks/holidays/summer free
+  ASU, Hillsdale, Samford) → review the away/home timeline → one tap blocks
+  the semester, leaving breaks/holidays/summer free
 - `lib/schoolCalendars.ts` — registrar-verified 2026–27 term data + pure
   expansion logic; rows are tagged `School · <name>` so re-import/clear is one
   action and manual blocks are never touched (no schema change needed)
@@ -68,8 +68,9 @@ _Newest first. Shipped / Learned / Decided — 3 bullets max each._
 **Decided:**
 - Semester scheduling is for leave/return/break windows (Friendsgiving,
   Christmas party dates), NOT week-to-week class times — no time-of-day model
-- Away vs local fork in the flow: commuter students (most KSU users) get only
-  optional finals-week blocks, not a fake four-month blackout
+- No away-vs-local question (Tad cut it): importing a school schedule simply
+  means "blocked while school is in session" — anyone it doesn't fit skips the
+  import or untaps stretches in the review step
 - `lib/schoolCalendars.ts` needs a ~10-minute date refresh each year when
   registrars publish the next cycle (guarded by data-sanity tests)
 

@@ -37,8 +37,6 @@ export type SchoolTerm = {
   name: string // 'Fall 2026'
   awayStart: string // first day of classes
   awayEnd: string // last final exam day
-  finalsStart: string // published exam window — used for "local" mode
-  finalsEnd: string
   breaks: SchoolBreak[]
 }
 
@@ -74,8 +72,6 @@ export const SCHOOLS: School[] = [
         name: 'Fall 2026',
         awayStart: '2026-08-24',
         awayEnd: '2026-12-14',
-        finalsStart: '2026-12-08',
-        finalsEnd: '2026-12-14',
         breaks: [
           // Break is Mon Nov 23 – Sun Nov 29; classes end Fri Nov 20.
           { name: 'Thanksgiving break', start: '2026-11-21', end: '2026-11-29' },
@@ -85,8 +81,6 @@ export const SCHOOLS: School[] = [
         name: 'Spring 2027',
         awayStart: '2027-01-11',
         awayEnd: '2027-05-03',
-        finalsStart: '2027-04-27',
-        finalsEnd: '2027-05-03',
         breaks: [
           // Break is Mon Mar 1 – Sun Mar 7; home from the Saturday before.
           { name: 'Spring break', start: '2027-02-27', end: '2027-03-07' },
@@ -104,8 +98,6 @@ export const SCHOOLS: School[] = [
         name: 'Fall 2026',
         awayStart: '2026-08-26',
         awayEnd: '2026-12-17',
-        finalsStart: '2026-12-14',
-        finalsEnd: '2026-12-17',
         breaks: [
           { name: 'Fall break', start: '2026-10-17', end: '2026-10-21' },
           { name: 'Thanksgiving break', start: '2026-11-25', end: '2026-11-29' },
@@ -115,8 +107,6 @@ export const SCHOOLS: School[] = [
         name: 'Spring 2027',
         awayStart: '2027-01-11',
         awayEnd: '2027-05-06',
-        finalsStart: '2027-05-03',
-        finalsEnd: '2027-05-06',
         breaks: [{ name: 'Spring break', start: '2027-03-06', end: '2027-03-14' }],
       },
     ],
@@ -131,8 +121,6 @@ export const SCHOOLS: School[] = [
         name: 'Fall 2026',
         awayStart: '2026-08-20',
         awayEnd: '2026-12-12',
-        finalsStart: '2026-12-07',
-        finalsEnd: '2026-12-12',
         breaks: [
           { name: 'Fall break', start: '2026-10-10', end: '2026-10-13' },
           // Officially classes are excused Thu–Fri; Wed is not confirmed off.
@@ -143,8 +131,6 @@ export const SCHOOLS: School[] = [
         name: 'Spring 2027',
         awayStart: '2027-01-11',
         awayEnd: '2027-05-08',
-        finalsStart: '2027-05-03',
-        finalsEnd: '2027-05-08',
         breaks: [{ name: 'Spring break', start: '2027-03-06', end: '2027-03-14' }],
       },
     ],
@@ -159,8 +145,6 @@ export const SCHOOLS: School[] = [
         name: 'Fall 2026',
         awayStart: '2026-08-26',
         awayEnd: '2026-12-12',
-        finalsStart: '2026-12-07',
-        finalsEnd: '2026-12-12',
         breaks: [
           { name: 'Fall break', start: '2026-10-01', end: '2026-10-04' },
           // Hillsdale housing closes over Thanksgiving/Christmas/spring
@@ -172,8 +156,6 @@ export const SCHOOLS: School[] = [
         name: 'Spring 2027',
         awayStart: '2027-01-13',
         awayEnd: '2027-05-05',
-        finalsStart: '2027-04-29',
-        finalsEnd: '2027-05-05',
         breaks: [
           // Spring break begins 5pm Fri Feb 26; classes resume Mon Mar 8.
           { name: 'Spring break', start: '2027-02-27', end: '2027-03-07' },
@@ -193,8 +175,6 @@ export const SCHOOLS: School[] = [
         name: 'Fall 2026',
         awayStart: '2026-08-24',
         awayEnd: '2026-12-10',
-        finalsStart: '2026-12-07',
-        finalsEnd: '2026-12-10',
         breaks: [
           // Break is Mon Oct 12 – Tue Oct 13; home from the Saturday before.
           { name: 'Fall break', start: '2026-10-10', end: '2026-10-13' },
@@ -206,8 +186,6 @@ export const SCHOOLS: School[] = [
         name: 'Spring 2027',
         awayStart: '2027-01-11',
         awayEnd: '2027-04-29',
-        finalsStart: '2027-04-26',
-        finalsEnd: '2027-04-29',
         breaks: [
           // Break is Mon Mar 8 – Fri Mar 12; both weekends attach.
           { name: 'Spring break', start: '2027-03-06', end: '2027-03-14' },
@@ -281,9 +259,9 @@ export function termSegments(term: SchoolTerm): ScheduleSegment[] {
 }
 
 /**
- * Full-year view for the "away at school" mode: each term split around its
- * breaks, with the between-term gap surfaced as a home "Winter break" segment
- * so the review list reads as one continuous story.
+ * Full-year view of a school's schedule: each term split around its breaks,
+ * with the between-term gap surfaced as a home "Winter break" segment so the
+ * review list reads as one continuous story.
  */
 export function schoolYearSchedule(school: School): SchoolSchedule {
   const segments: ScheduleSegment[] = []
@@ -301,23 +279,6 @@ export function schoolYearSchedule(school: School): SchoolSchedule {
       })
     }
   })
-  return { segments, summerFrom: shiftDate(terms[terms.length - 1].awayEnd, 1) }
-}
-
-/**
- * "Local / commuting" mode: nothing blocks by default during the semester —
- * the person never leaves town. The only candidate blocks are finals crunch
- * weeks, offered as toggleable segments.
- */
-export function localFinalsSchedule(school: School): SchoolSchedule {
-  const terms = [...school.terms].sort((a, b) => a.awayStart.localeCompare(b.awayStart))
-  const segments: ScheduleSegment[] = terms.map((term) => ({
-    kind: 'away',
-    label: 'Finals crunch',
-    termName: term.name,
-    start: term.finalsStart,
-    end: term.finalsEnd,
-  }))
   return { segments, summerFrom: shiftDate(terms[terms.length - 1].awayEnd, 1) }
 }
 

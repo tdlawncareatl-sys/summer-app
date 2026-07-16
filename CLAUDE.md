@@ -47,8 +47,10 @@ events that need a *first* vote are surfaced, not hidden. Logic lives in `lib/st
 
 The availability model is blackout-by-exception, which breaks when friends leave for
 college. The **School schedule** import on the Availability page fixes that: pick your
-college → away-at-school or local/commuting → review the away/home timeline → confirm.
-Away stretches become ordinary `availability` rows tagged `School · <name>`
+college → review the away/home timeline → confirm. Importing means "blocked while
+school is in session" (there is deliberately no away-vs-commuter question — skip
+stretches in the review step if that's not you). Away stretches become ordinary
+`availability` rows tagged `School · <name>`
 (`SCHOOL_CATEGORY_PREFIX`); breaks, holidays, and summer stay free. Re-importing or
 clearing replaces only school-tagged rows — manual blocks are never touched.
 

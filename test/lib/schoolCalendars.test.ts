@@ -4,7 +4,6 @@ import {
   SCHOOL_CATEGORY_PREFIX,
   expandBlockedDays,
   isSchoolCategory,
-  localFinalsSchedule,
   schoolById,
   schoolCategoryLabel,
   schoolYearSchedule,
@@ -26,18 +25,9 @@ describe('SCHOOLS data', () => {
       it('has at least one term with valid ISO dates', () => {
         expect(school.terms.length).toBeGreaterThan(0)
         for (const term of school.terms) {
-          for (const iso of [term.awayStart, term.awayEnd, term.finalsStart, term.finalsEnd]) {
-            expect(iso).toMatch(ISO)
-          }
+          expect(term.awayStart).toMatch(ISO)
+          expect(term.awayEnd).toMatch(ISO)
           expect(term.awayStart < term.awayEnd).toBe(true)
-          expect(term.finalsStart <= term.finalsEnd).toBe(true)
-        }
-      })
-
-      it('keeps finals inside the term', () => {
-        for (const term of school.terms) {
-          expect(term.finalsStart >= term.awayStart).toBe(true)
-          expect(term.finalsEnd <= term.awayEnd).toBe(true)
         }
       })
 
@@ -65,8 +55,6 @@ describe('termSegments', () => {
     name: 'Fall 2026',
     awayStart: '2026-08-24',
     awayEnd: '2026-12-14',
-    finalsStart: '2026-12-08',
-    finalsEnd: '2026-12-14',
     breaks: [{ name: 'Thanksgiving break', start: '2026-11-21', end: '2026-11-29' }],
   }
 
@@ -113,17 +101,6 @@ describe('schoolYearSchedule', () => {
         expect(segments[i].start > segments[i - 1].end).toBe(true)
       }
     }
-  })
-})
-
-describe('localFinalsSchedule', () => {
-  it('offers only finals windows as blocks', () => {
-    const samford = schoolById('samford')!
-    const { segments } = localFinalsSchedule(samford)
-    expect(segments).toEqual([
-      { kind: 'away', label: 'Finals crunch', termName: 'Fall 2026', start: '2026-12-07', end: '2026-12-10' },
-      { kind: 'away', label: 'Finals crunch', termName: 'Spring 2027', start: '2027-04-26', end: '2027-04-29' },
-    ])
   })
 })
 

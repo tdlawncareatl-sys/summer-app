@@ -2,10 +2,12 @@
 
 // Bottom sheet for importing a college semester schedule as blackout dates.
 //
-// Three steps:
+// Two steps:
 //   1. school  — pick which college you're at
-//   2. mode    — living away at school, or local/commuting?
-//   3. review  — the away/home timeline as a toggleable range list; confirm
+//   2. review  — the away/home timeline as a toggleable range list; confirm
+//
+// Importing a school means "blocked while school is in session" — breaks,
+// holidays, and summer stay free.
 //
 // The sheet is pure selection UI. Persistence stays on the Availability page
 // (the page owns the Supabase writes and the blackout state), passed in via
@@ -18,12 +20,10 @@ import {
   School,
   ScheduleSegment,
   expandBlockedDays,
-  localFinalsSchedule,
   schoolYearSchedule,
 } from '@/lib/schoolCalendars'
 
-type Mode = 'away' | 'local'
-type Step = 'school' | 'mode' | 'review'
+type Step = 'school' | 'review'
 
 type Props = {
   todayISO: string
@@ -55,14 +55,10 @@ export default function SchoolScheduleSheet({
 }: Props) {
   const [step, setStep] = useState<Step>('school')
   const [school, setSchool] = useState<School | null>(null)
-  const [mode, setMode] = useState<Mode>('away')
   const [disabledSegments, setDisabledSegments] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
 
-  const schedule = useMemo(() => {
-    if (!school) return null
-    return mode === 'away' ? schoolYearSchedule(school) : localFinalsSchedule(school)
-  }, [school, mode])
+  const schedule = useMemo(() => (school ? schoolYearSchedule(school) : null), [school])
 
   const enabledIndexes = useMemo(() => {
     if (!schedule) return new Set<number>()
@@ -76,12 +72,6 @@ export default function SchoolScheduleSheet({
 
   function pickSchool(s: School) {
     setSchool(s)
-    setDisabledSegments(new Set())
-    setStep('mode')
-  }
-
-  function pickMode(m: Mode) {
-    setMode(m)
     setDisabledSegments(new Set())
     setStep('review')
   }
@@ -164,44 +154,11 @@ export default function SchoolScheduleSheet({
           </>
         )}
 
-        {/* ── STEP 2 — away or local ── */}
-        {step === 'mode' && school && (
+        {/* ── STEP 2 — review ── */}
+        {step === 'review' && school && schedule && (
           <>
             <button type="button" onClick={() => setStep('school')} className="flex items-center gap-1 text-xs font-semibold text-ink-soft mb-3">
               <Icon name="chevronLeft" size={14} /> {school.short}
-            </button>
-            <p className="font-serif text-xl font-black text-ink">Where do you live during the semester?</p>
-            <p className="text-sm text-ink-soft mt-0.5 mb-4">This decides how much of the semester gets blocked.</p>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => pickMode('away')}
-                className="bg-sand rounded-xl px-4 py-3 text-left hover:bg-sand-alt active:scale-[0.99] transition"
-              >
-                <span className="block text-sm font-semibold text-ink">Away at school</span>
-                <span className="block text-xs text-ink-mute mt-0.5">
-                  Blocks the whole semester. Breaks, holidays, and summer stay free.
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => pickMode('local')}
-                className="bg-sand rounded-xl px-4 py-3 text-left hover:bg-sand-alt active:scale-[0.99] transition"
-              >
-                <span className="block text-sm font-semibold text-ink">Local / commuting</span>
-                <span className="block text-xs text-ink-mute mt-0.5">
-                  You&apos;re around all semester — only finals weeks are offered as blocks.
-                </span>
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* ── STEP 3 — review ── */}
-        {step === 'review' && school && schedule && (
-          <>
-            <button type="button" onClick={() => setStep('mode')} className="flex items-center gap-1 text-xs font-semibold text-ink-soft mb-3">
-              <Icon name="chevronLeft" size={14} /> {school.short} · {mode === 'away' ? 'Away at school' : 'Local'}
             </button>
             <p className="font-serif text-xl font-black text-ink">Does this look right?</p>
             <p className="text-sm text-ink-soft mt-0.5 mb-4">
