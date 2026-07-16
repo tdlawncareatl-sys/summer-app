@@ -29,18 +29,49 @@ big and broken. No external deadline — ship increments the friend group can ac
 _Live list. Keep it at 3. Anything beyond 3 goes in [roadmap.md](./roadmap.md) or
 [parking-lot.md](./parking-lot.md)._
 
-1. **Real-device pass on the redesigned Me page + updated app icon** — verify the
-   availability-first hierarchy lands on iPhone, the icon refreshes cleanly after
-   reinstall, and the calendar export/delete flows still feel native in the PWA shell.
-   _(Only Tad can do this — needs a physical phone.)_
-2. **Backfill the 05-22 and 06-08 session learnings** while they're still fresh — those
-   entries below were reconstructed from git and have empty Learned/Decided bullets.
-3. **Pick the next feature** — no backlog right now (no open issues, no TODOs, prod is
-   working). Choose from [parking-lot.md](./parking-lot.md) or a new idea.
+1. **Real-device pass on the School schedule flow** — run the import on iPhone as a
+   real user (away school + local KSU), confirm the review sheet feels right, then
+   have the away-at-college friends fill theirs in before fall semester starts (late
+   August). _(Only Tad can do this — needs a physical phone + the group.)_
+2. **Real-device pass on the redesigned Me page + updated app icon** — verify the
+   availability-first hierarchy lands on iPhone and the icon refreshes cleanly after
+   reinstall. _(Only Tad can do this.)_
+3. **Backfill the 05-22 and 06-08 session learnings** — those entries below were
+   reconstructed from git and have empty Learned/Decided bullets.
 
 ## Session log
 
 _Newest first. Shipped / Learned / Decided — 3 bullets max each._
+
+### 2026-07-15 — School schedules: year-round availability
+
+**Shipped:**
+- "School schedule" import on Availability: pick your college (KSU, Wheaton,
+  ASU, Hillsdale, Samford) → away-at-school or local → review the away/home
+  timeline → one tap blocks the semester, leaving breaks/holidays/summer free
+- `lib/schoolCalendars.ts` — registrar-verified 2026–27 term data + pure
+  expansion logic; rows are tagged `School · <name>` so re-import/clear is one
+  action and manual blocks are never touched (no schema change needed)
+- 30 new tests (data sanity + segment logic + sheet component flow);
+  `findBestRanges` horizon 90 → 180 days for winter-party planning
+
+**Learned:**
+- Academic calendars differ enough to matter (UGA takes the whole Thanksgiving
+  week, Georgia Tech only Wed–Fri) — a generic "college template" would put
+  people home on the wrong days
+- Registrars don't publish machine-readable feeds (Georgia Tech's page is a JS
+  app), so a curated in-repo data file + a human confirm step beats scraping
+- The existing blackout model absorbed the whole feature: away-at-school days
+  are just ordinary availability rows, so scoring/heatmap/voting all worked
+  untouched
+
+**Decided:**
+- Semester scheduling is for leave/return/break windows (Friendsgiving,
+  Christmas party dates), NOT week-to-week class times — no time-of-day model
+- Away vs local fork in the flow: commuter students (most KSU users) get only
+  optional finals-week blocks, not a fake four-month blackout
+- `lib/schoolCalendars.ts` needs a ~10-minute date refresh each year when
+  registrars publish the next cycle (guarded by data-sanity tests)
 
 ### 2026-06-20 — Retire Notion, drop the fake deadline, infra + repo cleanup
 

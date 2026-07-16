@@ -17,6 +17,8 @@ import PageHeader from '../components/PageHeader'
 import Card from '../components/Card'
 import Icon from '../components/Icon'
 import { conflictingDatesForOptions, densityForDay } from '@/lib/availability'
+import SchoolScheduleSheet from '../components/SchoolScheduleSheet'
+import { School, isSchoolCategory, schoolCategoryLabel } from '@/lib/schoolCalendars'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_LABELS = ['S','M','T','W','T','F','S']
@@ -100,6 +102,7 @@ export default function AvailabilityPage() {
   const [pendingDays, setPendingDays] = useState<string[] | null>(null)
   const [pendingLabel, setPendingLabel] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
+  const [schoolSheetOpen, setSchoolSheetOpen] = useState(false)
 
   const [groupBlackouts, setGroupBlackouts] = useState<GroupBlackouts>({})
   const [totalUsers, setTotalUsers] = useState(0)
@@ -388,6 +391,67 @@ export default function AvailabilityPage() {
     setClearingAll(false)
   }
 
+  // ─── school schedule import ──────────────────────────────────────────────
+  // The sheet picks the days; this page owns the writes. Applying replaces any
+  // earlier school-tagged rows (so re-importing or switching schools is safe)
+  // and never touches manually-entered blocks.
+  async function deleteSchoolRows(): Promise<string[]> {
+    if (!userId) return []
+    const schoolDates = blackoutRecords
+      .filter((r) => r.date >= todayISO && isSchoolCategory(r.category))
+      .map((r) => r.date)
+    if (schoolDates.length) {
+      const { error } = await supabase.from('availability').delete().eq('user_id', userId).in('date', schoolDates)
+      if (error) throw error
+    }
+    return schoolDates
+  }
+
+  async function applySchoolSchedule(school: School, days: string[]) {
+    if (!userId) return
+    clearNotice()
+    try {
+      const removed = await deleteSchoolRows()
+      const category = schoolCategoryLabel(school)
+      const { error } = await supabase
+        .from('availability')
+        .insert(days.map((date) => ({ user_id: userId, date, category })))
+      if (error) throw error
+      const newBlackouts = new Set(blackouts)
+      removed.forEach((d) => newBlackouts.delete(d))
+      days.forEach((d) => newBlackouts.add(d))
+      setBlackouts(newBlackouts)
+      setBlackoutRecords((prev) => [
+        ...prev.filter((r) => !removed.includes(r.date) && !days.includes(r.date)),
+        ...days.map((date) => ({ date, category })),
+      ])
+      setSchoolSheetOpen(false)
+      showNotice(`${school.short} schedule saved — ${days.length} days blocked, breaks left free.`, 'success')
+    } catch (error) {
+      console.error('availability.applySchoolSchedule', error)
+      showNotice(extractErrorMessage(error, 'Could not save your school schedule.'), 'error')
+    }
+  }
+
+  async function clearSchoolSchedule() {
+    if (!userId) return
+    clearNotice()
+    try {
+      const removed = await deleteSchoolRows()
+      if (removed.length) {
+        const newBlackouts = new Set(blackouts)
+        removed.forEach((d) => newBlackouts.delete(d))
+        setBlackouts(newBlackouts)
+        setBlackoutRecords((prev) => prev.filter((r) => !removed.includes(r.date)))
+      }
+      setSchoolSheetOpen(false)
+      showNotice(removed.length ? `${removed.length} school-schedule blocks removed.` : 'No school blocks to remove.', 'success')
+    } catch (error) {
+      console.error('availability.clearSchoolSchedule', error)
+      showNotice(extractErrorMessage(error, 'Could not remove your school blocks.'), 'error')
+    }
+  }
+
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells: (string | null)[] = [
@@ -415,6 +479,8 @@ export default function AvailabilityPage() {
   const selectedDateBlocked = selectedDate ? (groupBlackouts[selectedDate] ?? []) : []
   const futureRecords = blackoutRecords.filter((r) => r.date >= todayISO)
   const futureRanges = collapseToRanges(futureRecords)
+  const hasSchoolBlocks = futureRecords.some((r) => isSchoolCategory(r.category))
+  const nonSchoolBlocked = new Set(blackoutRecords.filter((r) => !isSchoolCategory(r.category)).map((r) => r.date))
 
   const pendingDateLabel = pendingDays
     ? pendingDays.length === 1
@@ -433,6 +499,18 @@ export default function AvailabilityPage() {
           : 'When the crew is collectively blocked.'
         }
       />
+
+      {/* School schedule bottom sheet */}
+      {schoolSheetOpen && (
+        <SchoolScheduleSheet
+          todayISO={todayISO}
+          nonSchoolBlocked={nonSchoolBlocked}
+          hasSchoolBlocks={hasSchoolBlocks}
+          onApply={applySchoolSchedule}
+          onClear={clearSchoolSchedule}
+          onClose={() => setSchoolSheetOpen(false)}
+        />
+      )}
 
       {/* Label bottom sheet */}
       {pendingDays && (
@@ -597,13 +675,22 @@ export default function AvailabilityPage() {
                     </button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setRangeMode(true)}
-                    className="ml-auto rounded-xl bg-olive-tint px-3 py-2 text-xs font-semibold text-olive active:scale-95"
-                  >
-                    Block range
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSchoolSheetOpen(true)}
+                      className="ml-auto rounded-xl bg-olive-tint px-3 py-2 text-xs font-semibold text-olive active:scale-95"
+                    >
+                      {hasSchoolBlocks ? 'Update school schedule' : 'School schedule'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRangeMode(true)}
+                      className="rounded-xl bg-olive-tint px-3 py-2 text-xs font-semibold text-olive active:scale-95"
+                    >
+                      Block range
+                    </button>
+                  </>
                 )}
               </div>
 

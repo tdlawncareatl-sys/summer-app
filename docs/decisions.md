@@ -39,6 +39,29 @@ Keep entries short. If it takes more than 10 lines, you're overthinking it.
 
 ---
 
+## 2026-07-15 — School schedules are curated data expanded into ordinary blackout rows
+
+**Choice:** Year-round availability ships as a semester import: a curated in-repo data
+file (`lib/schoolCalendars.ts`) holds each friend's college's registrar-published term
+and break dates; the flow expands "away at school" stretches into normal `availability`
+rows tagged `School · <name>`, leaving breaks free. Away vs local fork, review-before-save,
+one-tap clear/re-import. No schema change.
+**Alternatives considered:** Recurring weekly class blocks with time-of-day availability;
+live iCal/scraping integration with registrar calendars; a separate school_schedules table.
+**Why:** The actual year-round question is "when do people leave and when are they home"
+(Friendsgiving, Christmas party), not week-to-week class times. Registrars publish no
+machine-readable feeds, calendars differ per school in ways that matter (UGA vs Tech
+Thanksgiving), and plain blackout rows mean every existing surface — scoring, heatmap,
+voting — works untouched.
+**Trade-offs:** The data file needs a ~10-minute refresh each year (data-sanity tests
+guard the shape). Away/home is whole-day only; a local student's Tuesday class never
+blocks a Tuesday dinner because local mode blocks nothing but finals. Boundary tweaks
+(early drive home) are day-level edits on the calendar, not editable in the sheet.
+**Revisit if:** the group wants time-of-day availability, more schools than the file
+comfortably holds, or friends ask for weekend-trips-home modeling.
+
+---
+
 ## 2026-05-12 — Me should be an availability surface, not a generic profile dashboard
 
 **Choice:** Reorganize Me around marking blackout dates, seeing upcoming blocked ranges,

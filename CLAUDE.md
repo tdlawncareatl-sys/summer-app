@@ -43,6 +43,23 @@ An event reads as **Voting** as soon as it has date options (even with zero vote
 events that need a *first* vote are surfaced, not hidden. Logic lives in `lib/status.ts`
 (`inferEventStatus`) and per-user `needsMyVote` is derived in `lib/planData.ts`.
 
+## School schedules — year-round availability
+
+The availability model is blackout-by-exception, which breaks when friends leave for
+college. The **School schedule** import on the Availability page fixes that: pick your
+college → away-at-school or local/commuting → review the away/home timeline → confirm.
+Away stretches become ordinary `availability` rows tagged `School · <name>`
+(`SCHOOL_CATEGORY_PREFIX`); breaks, holidays, and summer stay free. Re-importing or
+clearing replaces only school-tagged rows — manual blocks are never touched.
+
+Term/break data lives in `lib/schoolCalendars.ts` (pure logic, no Supabase) with
+registrar-verified 2026–27 dates for KSU, Wheaton, ASU, Hillsdale, and Samford.
+**Update the dates once a year** when registrars publish the next cycle — data-sanity
+tests in `test/lib/schoolCalendars.test.ts` guard the shape. This is deliberately NOT
+week-to-week class scheduling: no time-of-day, no recurring blocks. It answers "when do
+people leave and when are they home" for things like Friendsgiving and Christmas-party
+date hunting.
+
 ## This Week — casual weekly plans
 
 Lightweight, intentionally separate from the formal event system. Pure logic in

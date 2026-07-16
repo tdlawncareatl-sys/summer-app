@@ -87,13 +87,17 @@ export function scoreRange(
  * For couple_hours / day_long, candidates are individual days.
  *
  * Ranking: highest free → lowest blocked → lowest unknown → earliest date.
+ *
+ * Default horizon is 180 days: with school-year planning (Friendsgiving, a
+ * Christmas party) the target date can sit 4–6 months out, and 90 days
+ * quietly excluded it.
  */
 export function findBestRanges(
   lengthType: LengthType,
   participants: Participant[],
   availability: AvailabilityRow[],
   todayISO: string,
-  horizonDays = 90,
+  horizonDays = 180,
 ): ScoredRange[] {
   const candidates: { startDate: string; endDate: string }[] = []
   const start = new Date(todayISO + 'T12:00:00')
