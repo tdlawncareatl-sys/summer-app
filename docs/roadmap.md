@@ -13,6 +13,7 @@
 
 | Item | Area | Effort | Why it matters | Issue |
 |---|---|---|---|---|
+| Archive option for events | Events | S | Reversible "put away" for dead/past plans now that anyone can hard-delete. Design agreed 2026-07-15: one-tap Archive in the options sheet (no confirm — it's reversible), new `archived` status via migration, filtered out in planData, collapsed Archived section + Restore on Events. Manual only for v1. | — |
 | Pin turbopack root for clean localhost preview | Infra | XS | Local browser checks are blocked because Next 16 dev resolves summer-app against the parent workspace root. | — |
 
 ## In Progress
