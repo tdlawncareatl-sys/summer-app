@@ -39,6 +39,24 @@ Keep entries short. If it takes more than 10 lines, you're overthinking it.
 
 ---
 
+## 2026-07-19 — AI connector auth is a per-friend key in the URL, not OAuth
+
+**Choice:** The MCP endpoint (`/api/mcp`) authenticates with a `?key=` in the URL, one
+key per friend, derived as HMAC-SHA256(`MCP_SECRET`, user id) — nothing stored, nothing
+migrated. The key also *identifies* the caller, so every AI-made write lands as that friend.
+**Alternatives considered:** Full OAuth server (what "real" connectors do); a single shared
+key plus a "who are you" parameter; a keys table in Supabase.
+**Why:** claude.ai's custom-connector UI accepts only a URL, so auth must ride in it.
+OAuth is weeks of work for a 12-friend app. A shared key loses identity — and identity is
+what makes "block my dates" work. Deriving from one secret means zero storage and the
+`/api/mcp-keys` page can list every link on demand.
+**Trade-offs:** Keys appear in server/request logs (accepted — they gate a friend-group
+calendar, not money). Revoking one person means rotating `MCP_SECRET` and re-sending
+everyone's links. Anyone with a link can act as that friend — same honor system as the
+app's pick-your-name era.
+**Revisit if:** the app ever holds sensitive data, the group outgrows the honor system,
+or claude.ai grows a proper header/token field for custom connectors.
+
 ## 2026-07-15 — School schedules are curated data expanded into ordinary blackout rows
 
 **Choice:** Year-round availability ships as a semester import: a curated in-repo data

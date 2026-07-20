@@ -62,6 +62,21 @@ week-to-week class scheduling: no time-of-day, no recurring blocks. It answers "
 people leave and when are they home" for things like Friendsgiving and Christmas-party
 date hunting.
 
+## AI connector (MCP)
+
+`/api/mcp?key=<per-friend key>` is an MCP server (mcp-handler + zod, `lib/mcp/`) that
+lets Claude or any MCP-speaking AI read and write the app as a specific friend. Keys
+derive from the `MCP_SECRET` env var (HMAC per user id — see `lib/mcp/keys.ts`);
+`/api/mcp-keys?secret=<MCP_SECRET>` lists everyone's personal link. Rules that matter:
+
+- **Identity comes from the key.** Tools call `currentFriend()` (`lib/mcp/context.ts`);
+  never accept "acting as X" from tool arguments.
+- **Writes mirror the app's write paths** (voting upserts with the `points` compat
+  column, star demotion, attendance upsert, availability insert-ignore). If a write
+  path changes in the app, change it in `lib/mcp/tools.ts` too.
+- **Set semantics, not toggle semantics.** The app's tap-to-toggle would make an AI
+  re-sending the same vote clear it; connector tools never do that.
+
 ## This Week — casual weekly plans
 
 Lightweight, intentionally separate from the formal event system. Pure logic in
