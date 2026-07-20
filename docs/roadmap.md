@@ -15,6 +15,7 @@
 |---|---|---|---|---|
 | Archive option for events | Events | S | Reversible "put away" for dead/past plans now that anyone can hard-delete. Design agreed 2026-07-15: one-tap Archive in the options sheet (no confirm — it's reversible), new `archived` status via migration, filtered out in planData, collapsed Archived section + Restore on Events. Manual only for v1. | — |
 | Pin turbopack root for clean localhost preview | Infra | XS | Local browser checks are blocked because Next 16 dev resolves summer-app against the parent workspace root. | — |
+| Backfill the 05-22 and 06-08 session learnings | Infra | XS | Those mission-control entries were reconstructed from git and have empty Learned/Decided bullets. (Moved from Top 3 on 2026-07-19 to make room for connector activation.) | — |
 
 ## In Progress
 
@@ -30,6 +31,7 @@ _(none)_
 
 | Item | Area | Effort | Shipped | Why it matters |
 |---|---|---|---|---|
+| AI connector (MCP) with per-friend links | Infra | L | 2026-07-19 | Anyone in the group can hook Claude (or any MCP-speaking AI) to the app with one pasted link and read/write availability, votes, events, and ideas as themselves. |
 | School schedule import (year-round availability) | Availability | L | 2026-07-15 | One tap blocks a college semester and keeps breaks free — makes the app usable for Friendsgiving/Christmas planning, not just summer. |
 | Editable blocks in My Blocks | Availability | S | 2026-07-15 | Tap a block to adjust its dates or label instead of delete-and-redraw. |
 | Anyone can delete events, with in-app confirm | Events | XS | 2026-07-15 | Cleanup isn't gated on the creator; a confirm/cancel step in the sheet replaces the browser popup. |

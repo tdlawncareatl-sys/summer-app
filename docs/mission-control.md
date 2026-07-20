@@ -29,19 +29,50 @@ big and broken. No external deadline — ship increments the friend group can ac
 _Live list. Keep it at 3. Anything beyond 3 goes in [roadmap.md](./roadmap.md) or
 [parking-lot.md](./parking-lot.md)._
 
-1. **Real-device pass on the School schedule flow** — run the import on iPhone as a
+1. **Activate the AI connector** — set `MCP_SECRET` in Vercel (any long random
+   string), redeploy, open `/api/mcp-keys?secret=<that secret>`, and add your own
+   link in Claude → Settings → Connectors. Text friends their links when it feels
+   right. _(Only Tad can do this — needs Vercel access.)_
+2. **Real-device pass on the School schedule flow** — run the import on iPhone as a
    real user, confirm the review sheet feels right, then have the college friends
    fill theirs in before fall semester starts (late August). _(Only Tad can do
    this — needs a physical phone + the group.)_
-2. **Real-device pass on the redesigned Me page + updated app icon** — verify the
+3. **Real-device pass on the redesigned Me page + updated app icon** — verify the
    availability-first hierarchy lands on iPhone and the icon refreshes cleanly after
    reinstall. _(Only Tad can do this.)_
-3. **Backfill the 05-22 and 06-08 session learnings** — those entries below were
-   reconstructed from git and have empty Learned/Decided bullets.
 
 ## Session log
 
 _Newest first. Shipped / Learned / Decided — 3 bullets max each._
+
+### 2026-07-19 — AI connector: MCP server with per-friend links
+
+**Shipped:**
+- MCP endpoint at `/api/mcp` (mcp-handler + zod) with 17 tools: availability
+  read/block/unblock, who's-free scoring, best-date finder, events
+  (list/detail/create/propose/vote/attendance), ideas, This Week read + vote —
+  every write mirrors the app's own write paths
+- Per-friend connector links: `?key=` derived as HMAC(MCP_SECRET, user id) — no
+  schema change, no key table; `/api/mcp-keys?secret=…` lists everyone's link to
+  copy/text; each key both gates access and identifies who's acting
+- Smoke-tested the full protocol locally against prod data (initialize,
+  tools/list, whoami, whos_free) plus 401s for bad/missing keys; 128 tests pass
+
+**Learned:**
+- claude.ai's custom-connector UI accepts exactly one thing — a URL — so auth has
+  to live in the URL (Zapier-style key) unless you build a whole OAuth server
+- Reusing the singleton `lib/supabase` client server-side just works (RLS is off,
+  anon key), so `loadThisWeek`/`castWeeklyVote` were directly reusable
+- mcp-handler needs zod pinned to v3 — npm resolves v4 by default and the SDK's
+  schema conversion breaks
+
+**Decided:**
+- URL-embedded HMAC keys over OAuth for the 12-friend trust model (see
+  decisions.md); rotating `MCP_SECRET` kills every link at once
+- Connector tools use "set" semantics, not the app's tap-to-toggle semantics —
+  an AI re-sending "works" should never accidentally clear a vote
+- Needs `MCP_SECRET` set in Vercel before anything works — endpoint returns 503
+  until then
 
 ### 2026-07-15 — School schedules: year-round availability
 
