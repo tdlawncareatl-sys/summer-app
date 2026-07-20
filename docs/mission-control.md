@@ -11,7 +11,7 @@ big and broken. No external deadline — ship increments the friend group can ac
 
 ## Live links
 
-- **App (prod):** https://summer-app.vercel.app
+- **App (prod):** https://summoreplans.com
 - **Repo:** https://github.com/tdlawncareatl-sys/summer-app
 - **Issues (what's next):** https://github.com/tdlawncareatl-sys/summer-app/issues
 - **Supabase:** the dashboard Tad has bookmarked

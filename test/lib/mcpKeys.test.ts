@@ -50,8 +50,8 @@ describe('secretMatches', () => {
 
 describe('connectorUrl', () => {
   it('builds the paste-into-claude link', () => {
-    expect(connectorUrl('https://summer-app.vercel.app', 'abc123')).toBe(
-      'https://summer-app.vercel.app/api/mcp?key=abc123',
+    expect(connectorUrl('https://summoreplans.com', 'abc123')).toBe(
+      'https://summoreplans.com/api/mcp?key=abc123',
     )
   })
 })
